@@ -1,0 +1,11 @@
+{
+  "id": "T2-pager-off-by-one",
+  "repo": "benchmarks/pager-py/repo",
+  "goal": "Fix pagination off-by-one: page number is 1-based.",
+  "allowlist": ["pager.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 8,
+    "max_cost_usd": 0.0
+  }
+}

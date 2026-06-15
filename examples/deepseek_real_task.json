@@ -1,0 +1,16 @@
+{
+  "id": "deepseek-real-retry-429",
+  "repo": "benchmarks_realistic/retry-429-real/repo",
+  "goal": "Issue: customers report that requests receiving HTTP 429 rate-limit responses are never retried, even when retry budget remains. Fix retry decision logic while keeping ordinary 4xx responses non-retryable.",
+  "allowlist": ["http_client.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "enable_llm_calls": true,
+    "max_steps": 8,
+    "prompt_char_budget": 30000,
+    "llm_timeout_seconds": 60,
+    "llm_max_tokens": 2048,
+    "acceptance_timeout_seconds": 10,
+    "context_summary_files": 8
+  }
+}

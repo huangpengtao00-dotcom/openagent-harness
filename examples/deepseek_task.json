@@ -1,0 +1,18 @@
+{
+  "id": "T-deepseek-demo",
+  "repo": "benchmarks/calc-py/repo",
+  "goal": "Return None when divide receives zero denominator.",
+  "allowlist": ["app.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 6,
+    "enable_llm_calls": false,
+    "prompt_char_budget": 40000,
+    "llm_timeout_seconds": 60,
+    "llm_max_tokens": 2048,
+    "tool_timeout_seconds": 30,
+    "acceptance_timeout_seconds": 30,
+    "thinking": "disabled",
+    "reasoning_effort": "high"
+  }
+}

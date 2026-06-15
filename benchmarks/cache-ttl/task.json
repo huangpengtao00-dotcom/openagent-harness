@@ -1,0 +1,8 @@
+{
+  "id": "T6-cache-ttl",
+  "repo": "benchmarks/cache-ttl/repo",
+  "goal": "Cache should evict expired entries and return None when expires_at <= now.",
+  "allowlist": ["cache.py"],
+  "acceptance": ["pytest"],
+  "budget": {"max_steps": 8, "acceptance_timeout_seconds": 30}
+}

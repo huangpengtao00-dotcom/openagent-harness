@@ -1,0 +1,18 @@
+__pycache__/
+.pytest_cache/
+.venv/
+runs/
+runs_*/
+*.egg-info/
+src/*.egg-info/
+dist/
+build/
+*.pyc
+*.sqlite
+*.zip
+tools/
+AGENTS.md
+# Local API secrets. Never commit real keys.
+.env
+.env.*
+!.env.example

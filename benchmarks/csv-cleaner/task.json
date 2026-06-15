@@ -1,0 +1,11 @@
+{
+  "id": "T5-csv-bom-cleanup",
+  "repo": "benchmarks/csv-cleaner/repo",
+  "goal": "CSV cleaner should remove UTF-8 BOM from cells.",
+  "allowlist": ["csv_cleaner.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 8,
+    "max_cost_usd": 0.0
+  }
+}
