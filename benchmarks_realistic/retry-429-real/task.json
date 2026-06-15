@@ -1,0 +1,8 @@
+{
+  "id": "retry-429-real",
+  "repo": "benchmarks_realistic/retry-429-real/repo",
+  "goal": "Issue: customers report that requests receiving HTTP 429 rate-limit responses are never retried, even when retry budget remains. Fix retry decision logic while keeping ordinary 4xx responses non-retryable.",
+  "allowlist": ["http_client.py"],
+  "acceptance": ["pytest"],
+  "budget": {"acceptance_timeout_seconds": 10, "context_summary_files": 8}
+}

@@ -1,0 +1,11 @@
+{
+  "id": "T1-calc-div-zero",
+  "repo": "benchmarks/calc-py/repo",
+  "goal": "Return None when divide receives zero denominator.",
+  "allowlist": ["app.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 8,
+    "max_cost_usd": 0.0
+  }
+}

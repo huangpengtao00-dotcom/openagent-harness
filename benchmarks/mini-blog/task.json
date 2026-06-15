@@ -1,0 +1,11 @@
+{
+  "id": "T4-mini-blog-slug-conflict",
+  "repo": "benchmarks/mini-blog/repo",
+  "goal": "Slug conflict should return 409 instead of creating a duplicate post.",
+  "allowlist": ["blog.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 8,
+    "max_cost_usd": 0.0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "config-loader-real",
+  "repo": "benchmarks_realistic/config-loader-real/repo",
+  "goal": "Issue: config loader drops default nested headers when a user provides one custom header. Implement safe nested merging without mutating DEFAULTS.",
+  "allowlist": ["config_loader.py"],
+  "acceptance": ["pytest"],
+  "budget": {"acceptance_timeout_seconds": 10, "context_summary_files": 8}
+}

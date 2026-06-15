@@ -1,0 +1,11 @@
+{
+  "id": "T3-cli-invalid-flag",
+  "repo": "benchmarks/cli-tool/repo",
+  "goal": "Invalid CLI flags should return exit code 2.",
+  "allowlist": ["cli_tool.py"],
+  "acceptance": ["pytest"],
+  "budget": {
+    "max_steps": 8,
+    "max_cost_usd": 0.0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "T7-retry-policy",
+  "repo": "benchmarks/retry-policy/repo",
+  "goal": "HTTP retry policy should not retry ordinary client errors; retry transient 408/429 and 5xx while retry budget remains.",
+  "allowlist": ["retry_policy.py"],
+  "acceptance": ["pytest"],
+  "budget": {"max_steps": 8, "acceptance_timeout_seconds": 30}
+}

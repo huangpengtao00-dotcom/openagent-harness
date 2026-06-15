@@ -1,0 +1,8 @@
+{
+  "id": "fastapi-error-handler-real",
+  "repo": "benchmarks_realistic/fastapi-error-handler-real/repo",
+  "goal": "Issue: production API error handler leaks internal exception messages to clients. Preserve AppError behavior, but hide unexpected exception details unless debug=True.",
+  "allowlist": ["error_response.py"],
+  "acceptance": ["pytest"],
+  "budget": {"acceptance_timeout_seconds": 10, "context_summary_files": 8}
+}
