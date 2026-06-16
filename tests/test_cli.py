@@ -87,3 +87,32 @@ def test_cli_api_check_ignores_task_enable_llm_calls_without_network(tmp_path: P
     assert result.exit_code == 0
     assert "status=missing_key" in result.output
     assert "network_call=false" in result.output
+
+
+def test_cli_api_check_reads_env_from_spec_directory_only(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / ".env").write_text("DEEPSEEK_API_KEY=sk-local-test-value\n", encoding="utf-8")
+    spec_path = spec_dir / "task.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "id": "T-api-local-env",
+                "repo": str(tmp_path),
+                "goal": "Fix with model",
+                "allowlist": ["app.py"],
+                "acceptance": ["pytest"],
+                "budget": {"max_steps": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["api-check", str(spec_path), "--model", "deepseek-v4-flash", "--runs", str(tmp_path / "runs")])
+
+    assert result.exit_code == 0
+    assert "status=ok" in result.output
+    assert "api_key_configured=true" in result.output

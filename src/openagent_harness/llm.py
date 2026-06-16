@@ -8,7 +8,7 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
-from .env import load_env_file, sanitize_mapping
+from .env import sanitize_mapping
 
 
 _DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
@@ -125,7 +125,6 @@ class OpenAICompatibleClient:
         reasoning_effort: str | None = None,
         user_id: str | None = None,
     ) -> None:
-        load_env_file()
         self.model = model
         self.base_url = (base_url or env_first("OPENAGENT_BASE_URL", "DEEPSEEK_BASE_URL") or _DEFAULT_DEEPSEEK_BASE_URL).rstrip("/")
         self.api_key = api_key or env_first("OPENAGENT_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")

@@ -4,7 +4,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-_IGNORED_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules", ".venv", "runs"}
+from .ignore_rules import IGNORED_DIR_NAMES, IGNORED_FILE_NAMES, IGNORED_SUFFIXES
 
 
 @dataclass(frozen=True)
@@ -30,4 +30,9 @@ class WorkspaceManager:
         return Workspace(source=source_repo, path=target_dir, strategy=strategy)
 
     def _ignore(self, directory: str, names: list[str]) -> set[str]:
-        return {name for name in names if name in _IGNORED_DIRS}
+        ignored: set[str] = set()
+        for name in names:
+            path = Path(directory) / name
+            if name in IGNORED_DIR_NAMES or name in IGNORED_FILE_NAMES or path.suffix in IGNORED_SUFFIXES:
+                ignored.add(name)
+        return ignored
