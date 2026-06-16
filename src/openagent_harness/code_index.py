@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-_IGNORED_PARTS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules", ".venv"}
+from .ignore_rules import should_ignore_repo_path
 
 
 @dataclass(frozen=True)
@@ -90,7 +90,7 @@ def grep_repo(repo_dir: Path, query: str, *, limit: int = 20, suffixes: Iterable
     allowed_suffixes = set(suffixes or [".py", ".md", ".json", ".toml", ".yaml", ".yml", ".txt"])
     hits: list[SearchHit] = []
     for path in sorted(repo_dir.rglob("*")):
-        if not path.is_file() or any(part in _IGNORED_PARTS for part in path.relative_to(repo_dir).parts):
+        if not path.is_file() or should_ignore_repo_path(path, repo_dir):
             continue
         if path.suffix not in allowed_suffixes:
             continue
@@ -109,7 +109,7 @@ def grep_repo(repo_dir: Path, query: str, *, limit: int = 20, suffixes: Iterable
 
 def _iter_python_files(repo_dir: Path) -> Iterable[Path]:
     for path in sorted(repo_dir.rglob("*.py")):
-        if any(part in _IGNORED_PARTS for part in path.relative_to(repo_dir).parts):
+        if should_ignore_repo_path(path, repo_dir):
             continue
         yield path
 

@@ -25,6 +25,10 @@ def _load_spec(path: Path) -> TaskSpec:
     return TaskSpec.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _load_env_for_spec(spec_path: Path) -> None:
+    load_env_file(spec_path.resolve().parent / ".env")
+
+
 @app.command()
 def run(
     spec: Path = typer.Argument(..., help="Path to a task spec JSON file."),
@@ -35,7 +39,7 @@ def run(
     allow_llm_calls: bool = typer.Option(False, "--allow-llm-calls", help="Actually call the configured model API."),
 ) -> None:
     """Run a task through either the offline scripted path or the guarded API agent path."""
-    load_env_file()
+    _load_env_for_spec(spec)
     result = HarnessRunner(mode=mode, model=model, base_url=base_url, allow_llm_calls=allow_llm_calls).run_task(
         _load_spec(spec), runs
     )
@@ -58,7 +62,7 @@ def api_check(
     verifies that local .env / shell configuration can be resolved and writes a
     sanitized api_check.json artifact for debugging.
     """
-    load_env_file()
+    _load_env_for_spec(spec)
     loaded_spec = _load_spec(spec)
     client = OpenAICompatibleClient(model=model, base_url=base_url)
     run_hash = hashlib.sha256(f"{loaded_spec.id}|{model}|{client.base_url}".encode("utf-8")).hexdigest()[:8]

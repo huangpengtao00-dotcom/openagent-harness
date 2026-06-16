@@ -10,6 +10,7 @@ from pathlib import Path
 from .context import ContextBuilder
 from .gate import QualityGate
 from .html_report import write_run_html_report
+from .ignore_rules import should_ignore_repo_path
 from .model_adapter import ApiAgent, ScriptedAgent
 from .schema import GateResult, RunMode, RunResult, TaskSpec, TraceEvent
 from .tools import ToolResult, run_command
@@ -17,8 +18,6 @@ from .trace import JsonlTraceStore, SqliteTraceStore
 from .workspace import WorkspaceManager
 
 
-_IGNORED_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
-_IGNORED_SUFFIXES = {".pyc", ".pyo", ".sqlite", ".db"}
 _DEFAULT_ACCEPTANCE_TIMEOUT_SECONDS = 30.0
 
 
@@ -352,7 +351,4 @@ class HarnessRunner:
                 return candidate.as_posix()
 
     def _should_ignore(self, path: Path, repo_dir: Path) -> bool:
-        relative = Path(self._relative_path(repo_dir, path))
-        if any(part in _IGNORED_DIRS for part in relative.parts):
-            return True
-        return path.suffix in _IGNORED_SUFFIXES
+        return should_ignore_repo_path(path.resolve(), repo_dir.resolve())

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .code_index import build_code_index
+from .ignore_rules import IGNORED_DIR_NAMES, should_ignore_repo_path
 
 
 _TEXT_SUFFIXES = {
@@ -19,7 +20,6 @@ _TEXT_SUFFIXES = {
     ".cfg",
     ".csv",
 }
-_IGNORED_PARTS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "node_modules", ".venv"}
 _CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", "README.md", "pyproject.toml"]
 
 
@@ -57,7 +57,7 @@ class ContextBuilder:
         skipped: list[str] = []
         total_bytes = 0
         for path in sorted(self.repo_dir.rglob("*")):
-            if not path.is_file() or any(part in _IGNORED_PARTS for part in path.relative_to(self.repo_dir).parts):
+            if not path.is_file() or should_ignore_repo_path(path, self.repo_dir):
                 continue
             relative = path.relative_to(self.repo_dir).as_posix()
             if path.suffix and path.suffix not in _TEXT_SUFFIXES:
@@ -88,7 +88,7 @@ class ContextBuilder:
         parts.append("\n# Project Instructions\n")
         for name in _CONTEXT_FILES:
             path = self.repo_dir / name
-            if path.exists() and path.is_file():
+            if path.exists() and path.is_file() and not should_ignore_repo_path(path, self.repo_dir):
                 parts.append(f"\n## {name}\n")
                 parts.append(self._read_limited(path))
         parts.append("\n# Candidate File Contents\n")
