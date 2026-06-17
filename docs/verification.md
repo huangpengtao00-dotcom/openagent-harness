@@ -67,8 +67,8 @@ PYTHONPATH=src python -m openagent_harness.cli api-check examples/deepseek_real_
 Only these commands can spend tokens:
 
 ```bash
-PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash
+PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash --allow-llm-calls
 PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_real_task.json --mode api --model deepseek-v4-flash --allow-llm-calls --runs runs_deepseek_real
 ```
 
-Do not run them until `.env` contains a valid local `DEEPSEEK_API_KEY`.
+Do not run them until `.env` contains a valid local `DEEPSEEK_API_KEY`, and keep the explicit `--allow-llm-calls` gate so spend is never accidental.
