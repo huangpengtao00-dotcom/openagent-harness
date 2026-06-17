@@ -39,6 +39,15 @@ def test_sanitize_mapping_redacts_secret_like_values() -> None:
     assert "<redacted>" in rendered
 
 
+def test_sanitize_mapping_redacts_short_sk_placeholders() -> None:
+    payload = {"text": "prefix sk-test suffix"}
+
+    rendered = json.dumps(sanitize_mapping(payload))
+
+    assert "sk-test" not in rendered
+    assert "<redacted>" in rendered
+
+
 def test_deepseek_check_loads_local_env_without_printing_key(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
