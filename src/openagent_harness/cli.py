@@ -105,6 +105,7 @@ def deepseek_smoke(
     model: str = typer.Option("deepseek-v4-flash", "--model", help="DeepSeek/OpenAI-compatible model name."),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Override DeepSeek/OpenAI-compatible base URL."),
     runs: Path = typer.Option(Path("runs_deepseek_smoke"), "--runs", help="Directory where smoke artifacts are written."),
+    allow_llm_calls: bool = typer.Option(False, "--allow-llm-calls", help="Actually call the configured model API."),
     prompt: str = typer.Option(
         "Return a compact JSON object with fields status and message saying OpenAgent Harness API smoke test passed.",
         "--prompt",
@@ -113,6 +114,8 @@ def deepseek_smoke(
 ) -> None:
     """Make one real API call and write a sanitized smoke-test artifact. Never writes the API key."""
     load_env_file()
+    if not allow_llm_calls:
+        raise typer.BadParameter("Real API calls are disabled by default. Re-run with --allow-llm-calls to confirm spend is intentional.")
     client = OpenAICompatibleClient(model=model, base_url=base_url, max_tokens=256, timeout_seconds=30.0)
     if not client.is_configured():
         raise typer.BadParameter("No API key configured. Put DEEPSEEK_API_KEY in a local .env file or export it in the shell.")

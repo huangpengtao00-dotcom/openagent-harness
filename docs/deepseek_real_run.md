@@ -45,7 +45,7 @@ PYTHONPATH=src python -m openagent_harness.cli deepseek-check --model deepseek-v
 这一步只验证 API 连通性，不修改代码：
 
 ```bash
-PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash
+PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash --allow-llm-calls
 ```
 
 证据文件：

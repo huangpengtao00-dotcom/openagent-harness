@@ -4,6 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from openagent_harness.cli import app
+from openagent_harness.llm import LLMResponse, ModelUsage
 
 
 def test_cli_api_check_writes_configuration(tmp_path: Path, monkeypatch) -> None:
@@ -116,3 +117,37 @@ def test_cli_api_check_reads_env_from_spec_directory_only(tmp_path: Path, monkey
     assert result.exit_code == 0
     assert "status=ok" in result.output
     assert "api_key_configured=true" in result.output
+
+
+def test_cli_deepseek_smoke_requires_explicit_allow_flag(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-local-test-value\n", encoding="utf-8")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("chat should not run without explicit allow flag")
+
+    monkeypatch.setattr("openagent_harness.llm.OpenAICompatibleClient.chat", fail_if_called)
+
+    result = CliRunner().invoke(app, ["deepseek-smoke"])
+
+    assert result.exit_code != 0
+    assert "--allow-llm-calls" in result.output
+
+
+def test_cli_deepseek_smoke_runs_when_explicitly_allowed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-local-test-value\n", encoding="utf-8")
+
+    def fake_chat(self, messages, *, response_format_json=False):
+        return LLMResponse(
+            content='{"status":"ok"}',
+            usage=ModelUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5, estimated_cost_usd=0.0000014),
+            raw={"id": "fake"},
+        )
+
+    monkeypatch.setattr("openagent_harness.llm.OpenAICompatibleClient.chat", fake_chat)
+
+    result = CliRunner().invoke(app, ["deepseek-smoke", "--allow-llm-calls", "--runs", str(tmp_path / "runs")])
+
+    assert result.exit_code == 0
+    assert "ok=true" in result.output
