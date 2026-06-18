@@ -4,7 +4,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .ignore_rules import IGNORED_DIR_NAMES, IGNORED_FILE_NAMES, IGNORED_SUFFIXES
+from .ignore_rules import IGNORED_SUFFIXES, should_ignore_repo_name
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,6 @@ class WorkspaceManager:
         ignored: set[str] = set()
         for name in names:
             path = Path(directory) / name
-            if name in IGNORED_DIR_NAMES or name in IGNORED_FILE_NAMES or path.suffix in IGNORED_SUFFIXES:
+            if should_ignore_repo_name(name) or path.suffix in IGNORED_SUFFIXES:
                 ignored.add(name)
         return ignored
