@@ -27,6 +27,16 @@ def test_load_env_file_and_configuration_note_never_exposes_key(tmp_path: Path, 
     assert "sk-test-secret-value" not in rendered
 
 
+def test_load_env_file_accepts_export_prefix(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    env_path = tmp_path / ".env"
+    env_path.write_text("export DEEPSEEK_API_KEY=sk-test-secret-value\n", encoding="utf-8")
+
+    loaded = load_env_file(env_path)
+
+    assert loaded["DEEPSEEK_API_KEY"] == "sk-test-secret-value"
+
+
 def test_sanitize_mapping_redacts_secret_like_values() -> None:
     payload = {
         "authorization": "Bearer abc.def.ghi",
@@ -36,6 +46,15 @@ def test_sanitize_mapping_redacts_secret_like_values() -> None:
     rendered = json.dumps(sanitize_mapping(payload))
     assert "sk-test-secret-value" not in rendered
     assert "Bearer abc" not in rendered
+    assert "<redacted>" in rendered
+
+
+def test_sanitize_mapping_redacts_bearer_tokens_with_base64_chars() -> None:
+    payload = {"authorization": "Bearer abc/def+ghi=="}
+
+    rendered = json.dumps(sanitize_mapping(payload))
+
+    assert "abc/def+ghi==" not in rendered
     assert "<redacted>" in rendered
 
 
