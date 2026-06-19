@@ -27,6 +27,8 @@ def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[
             continue
         key, value = line.split("=", 1)
         key = key.strip()
+        if key.lower().startswith("export "):
+            key = key[7:].strip()
         value = value.strip().strip('"').strip("'")
         if not key:
             continue
