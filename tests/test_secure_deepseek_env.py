@@ -50,11 +50,12 @@ def test_sanitize_mapping_redacts_secret_like_values() -> None:
 
 
 def test_sanitize_mapping_redacts_bearer_tokens_with_base64_chars() -> None:
-    payload = {"authorization": "Bearer abc/def+ghi=="}
+    payload = {"text": "prefix Bearer abc/def+ghi== suffix"}
 
     rendered = json.dumps(sanitize_mapping(payload))
 
-    assert "abc/def+ghi==" not in rendered
+    assert "Bearer abc/def+ghi==" not in rendered
+    assert "def+ghi==" not in rendered
     assert "<redacted>" in rendered
 
 
