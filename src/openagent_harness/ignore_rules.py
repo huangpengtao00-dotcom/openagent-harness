@@ -9,6 +9,7 @@ IGNORED_DIR_NAMES = {
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
+    "venv",
     "node_modules",
     ".venv",
     "runs",
