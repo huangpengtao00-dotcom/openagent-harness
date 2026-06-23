@@ -9,7 +9,10 @@ def test_workspace_manager_excludes_secrets_databases_and_runtime_outputs(tmp_pa
     source.mkdir()
     (source / "app.py").write_text("print('ok')\n", encoding="utf-8")
     (source / ".env").write_text("DEEPSEEK_API_KEY=secret\n", encoding="utf-8")
+    (source / ".envrc").write_text("export OPENAI_API_KEY=secret\n", encoding="utf-8")
     (source / ".env.staging").write_text("OPENAI_API_KEY=secret\n", encoding="utf-8")
+    (source / ".direnv").mkdir()
+    (source / ".direnv" / "python.env").write_text("OPENAI_API_KEY=secret\n", encoding="utf-8")
     (source / "venv").mkdir()
     (source / "venv" / "pyvenv.cfg").write_text("home = C:/Python313\n", encoding="utf-8")
     (source / "openagent.db").write_text("sqlite-bytes", encoding="utf-8")
@@ -24,7 +27,9 @@ def test_workspace_manager_excludes_secrets_databases_and_runtime_outputs(tmp_pa
 
     assert (workspace.path / "app.py").exists()
     assert not (workspace.path / ".env").exists()
+    assert not (workspace.path / ".envrc").exists()
     assert not (workspace.path / ".env.staging").exists()
+    assert not (workspace.path / ".direnv").exists()
     assert not (workspace.path / "venv").exists()
     assert not (workspace.path / "openagent.db").exists()
     assert not (workspace.path / "artifacts").exists()
@@ -37,7 +42,10 @@ def test_context_builder_skips_secret_and_runtime_paths(tmp_path: Path) -> None:
     repo.mkdir()
     (repo / "app.py").write_text("def ok():\n    return True\n", encoding="utf-8")
     (repo / ".env").write_text("OPENAI_API_KEY=secret\n", encoding="utf-8")
+    (repo / ".envrc").write_text("export OPENAI_API_KEY=secret\n", encoding="utf-8")
     (repo / ".env.secret").write_text("DEEPSEEK_API_KEY=secret\n", encoding="utf-8")
+    (repo / ".direnv").mkdir()
+    (repo / ".direnv" / "python.env").write_text("OPENAI_API_KEY=secret\n", encoding="utf-8")
     (repo / "venv").mkdir()
     (repo / "venv" / "pyvenv.cfg").write_text("home = C:/Python313\n", encoding="utf-8")
     (repo / "artifacts").mkdir()
@@ -52,7 +60,9 @@ def test_context_builder_skips_secret_and_runtime_paths(tmp_path: Path) -> None:
 
     assert "app.py" in indexed_paths
     assert ".env" not in indexed_paths
+    assert ".envrc" not in indexed_paths
     assert ".env.secret" not in indexed_paths
+    assert ".direnv/python.env" not in indexed_paths
     assert "venv/pyvenv.cfg" not in indexed_paths
     assert "artifacts/report.html" not in indexed_paths
     assert "runs/trace.jsonl" not in indexed_paths
