@@ -5,6 +5,7 @@ from pathlib import Path
 
 IGNORED_DIR_NAMES = {
     ".git",
+    ".direnv",
     "__pycache__",
     ".pytest_cache",
     ".mypy_cache",
@@ -19,6 +20,7 @@ IGNORED_DIR_NAMES = {
 }
 IGNORED_FILE_NAMES = {
     ".env",
+    ".envrc",
     ".env.local",
     ".env.development",
     ".env.test",
