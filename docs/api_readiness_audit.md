@@ -32,11 +32,11 @@ The recommended sequence is:
 ```bash
 cp .env.example .env
 PYTHONPATH=src python -m openagent_harness.cli deepseek-check --model deepseek-v4-flash
-PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash --allow-llm-calls
+PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash
 PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_real_task.json --mode api --model deepseek-v4-flash --allow-llm-calls --runs runs_deepseek_real
 ```
 
-Only the last two commands can make a network call, and both require an explicit `--allow-llm-calls` confirmation for real spend; `deepseek-check` and `api-check` are dry-run checks.
+Only the last two commands can make a network call; `deepseek-check` and `api-check` are dry-run checks.
 
 ## Non-goals
 

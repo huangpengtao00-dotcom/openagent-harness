@@ -1,6 +1,10 @@
 # OpenAgent Harness
 
-OpenAgent Harness is a local-first **Coding Agent evaluation and execution platform**. It is designed for AI engineering interviews: not a chatbot wrapper, but a runnable harness that connects an LLM coding loop with tool execution, safety policy, benchmark evaluation, trace evidence, and scoring.
+OpenAgent Harness is a **multi-model Coding Agent evaluation platform**. It runs the same engineering tasks across multiple model profiles, captures each patch/test/trace artifact, then produces a horizontal comparison by pass rate, score, cost, latency, patch size, and failure type.
+
+Related backend:
+
+- OpenAgent Platform Backend: https://github.com/huangpengtao00-dotcom/openagent-platform-backend
 
 ## What it does
 
@@ -13,7 +17,8 @@ Given a `task.json`, the harness can:
 5. enforce allowlist write scope and shell safety policy;
 6. run acceptance checks with timeout and structured evidence;
 7. generate `patch.diff`, `gate.json`, `scorecard.json`, `trace.jsonl`, `trace.sqlite`, `final_report.md`, and `report.html`;
-8. run benchmark suites and produce `eval_report.html`.
+8. run benchmark suites and produce `eval_report.html`;
+9. run a `task x model profile` comparison matrix and produce `comparison_summary.json` plus `comparison_report.html`.
 
 ## Why this project is interview-grade
 
@@ -26,6 +31,38 @@ Most coding-agent demos stop at “LLM generated code.” This project focuses o
 - How do you verify that a patch actually passes tests?
 - How do you classify failures and compare candidates?
 - How do you produce evidence an interviewer can inspect?
+
+## Multi-model comparison
+
+The main evaluation path is now a model comparison matrix:
+
+```bash
+PYTHONPATH=src python -m openagent_harness.cli compare \
+  --benchmarks benchmarks_engineering \
+  --profiles examples/model_profiles.json \
+  --runs runs_compare \
+  --parallel 3
+```
+
+This runs every task against every profile and writes:
+
+```text
+runs_compare/comparison_summary.json
+runs_compare/comparison_report.html
+runs_compare/<profile>/<task>/<run_id>/patch.diff
+runs_compare/<profile>/<task>/<run_id>/scorecard.json
+runs_compare/<profile>/<task>/<run_id>/trace.jsonl
+```
+
+To run real NewAPI model profiles, put keys in environment variables and pass `--allow-llm-calls`:
+
+```powershell
+$env:OPENAGENT_GPT55_API_KEY = "<gpt-5.5 channel key>"
+$env:OPENAGENT_GPT54_API_KEY = "<gpt-5.4 channel key>"
+python -m openagent_harness.cli compare --benchmarks benchmarks_engineering --profiles examples/model_profiles.json --runs runs_compare_real --parallel 2 --allow-llm-calls
+```
+
+The profile file stores model names, endpoint URLs, and environment variable names. API keys stay outside the repository.
 
 ## Architecture
 
@@ -46,6 +83,7 @@ Important modules:
 | `src/openagent_harness/context.py` | repository context compaction |
 | `src/openagent_harness/code_index.py` | Python AST symbol index and grep search |
 | `src/openagent_harness/runner.py` | workspace, diff, acceptance, gate, report pipeline |
+| `src/openagent_harness/compare.py` | multi-profile benchmark matrix and model comparison report |
 | `src/openagent_harness/scoring.py` | 0-100 run scorecard |
 | `src/openagent_harness/html_report.py` | readable run/eval reports |
 | `src/openagent_harness/portfolio.py` | candidate selection surface |
@@ -102,6 +140,29 @@ passed=3
 failed=0
 pass_rate=1.0
 ```
+
+The generated `eval_summary.json` is structured for quantitative comparison, not only pass/fail:
+
+```json
+{
+  "total": 3,
+  "passed": 3,
+  "failed": 0,
+  "pass_rate": 1.0,
+  "avg_score": 96.5,
+  "total_patch_lines": 182,
+  "total_changed_files": 5,
+  "tests_passed": 3,
+  "failure_types": {
+    "None": 3
+  },
+  "tokens": 0,
+  "total_cost_usd": 0.0,
+  "duration_seconds": 1.234
+}
+```
+
+Each result row also includes `profile`, `score`, `patch_lines`, `changed_files`, `tests_passed`, `failure_type`, `tokens`, `estimated_cost_usd`, `duration_seconds`, and `run_dir`. The Platform Dashboard consumes the same shape and adds live API/retry comparison.
 
 ## CLI examples
 
@@ -174,7 +235,7 @@ PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_real_task.j
   --allow-llm-calls
 ```
 
-API calls are disabled by default. This prevents accidental spending during demos. Real keys are read only from environment variables or local `.env`, and `.env` is excluded by `.gitignore`. See `docs/secure_deepseek_key_setup.md`.
+API calls are disabled by default at the Harness CLI request layer. This prevents accidental spending during demos. Real keys are read only from environment variables or local `.env`, and `.env` is excluded by `.gitignore`. `api-check` loads the current working directory `.env` first, then the task-spec directory `.env` without overriding existing values; it never makes a network call. See `docs/secure_deepseek_key_setup.md`.
 
 
 ## Stable verification commands
@@ -247,6 +308,14 @@ The `benchmarks_realistic/` suite adds three GitHub-issue-style tasks for interv
 | `config-loader-real` | nested config merge without mutating defaults |
 | `fastapi-error-handler-real` | production error response should not leak internals |
 
+The `benchmarks_engineering/` suite is intended for model comparison rather than simple smoke tests:
+
+| Task | Scenario |
+|---|---|
+| `policy-auth-audit` | multi-file config merge, authorization priority, audit redaction |
+| `retry-client-observability` | retry budget, 429/5xx handling, backoff, attempt events |
+| `artifact-query-api` | artifact path safety, filtering, pagination, missing-file tolerance |
+
 ## Evidence generated per run
 
 Each run directory contains:
@@ -267,12 +336,15 @@ final_report.md      compact text summary
 
 Use this one-liner:
 
-> OpenAgent Harness is a local-first coding-agent evaluation platform with DeepSeek/OpenAI-compatible LLM integration, JSON-action tool loop, patch-level editing, permission policy, repository context compaction, AST symbol indexing, acceptance verification, quality gate, scorecard, trace replay, and HTML evidence reports.
+> OpenAgent Harness is a multi-model coding-agent evaluation platform with OpenAI-compatible model profiles, concurrent task x model comparison, JSON-action tool loop, patch-level editing, permission policy, repository context compaction, acceptance verification, scorecards, trace replay, and HTML evidence reports.
 
 See:
 
 - `docs/final_architecture.md`
 - `docs/interview_playbook_cn.md`
+- `docs/interview_prep_from_zero_cn.md`
+- `docs/interview_flashcards_cn.md`
+- `docs/evidence_matrix.md`
 - `docs/demo_commands.md`
 
 

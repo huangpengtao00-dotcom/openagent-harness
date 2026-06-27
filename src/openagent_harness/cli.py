@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 
 from .code_index import build_code_index
+from .compare import run_compare
 from .context import ContextBuilder
 from .eval import run_eval
 from .llm import ChatMessage, OpenAICompatibleClient
@@ -26,6 +27,7 @@ def _load_spec(path: Path) -> TaskSpec:
 
 
 def _load_env_for_spec(spec_path: Path) -> None:
+    load_env_file()
     load_env_file(spec_path.resolve().parent / ".env")
 
 
@@ -36,12 +38,26 @@ def run(
     mode: RunMode = typer.Option("local", "--mode", help="local uses deterministic patches; api uses guarded LLM tool loop."),
     model: str = typer.Option("deepseek-v4-flash", "--model", help="OpenAI-compatible model name."),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="OpenAI-compatible base URL."),
+    wire_api: Optional[str] = typer.Option(None, "--wire-api", help="Provider wire API: chat_completions or responses."),
+    reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort for providers that support it."),
+    disable_response_storage: bool = typer.Option(False, "--disable-response-storage", help="Request provider-side response storage opt-out."),
     allow_llm_calls: bool = typer.Option(False, "--allow-llm-calls", help="Actually call the configured model API."),
+    failure_context: Optional[Path] = typer.Option(None, "--failure-context", help="Path to previous-run failure_context.json for a guarded retry."),
 ) -> None:
     """Run a task through either the offline scripted path or the guarded API agent path."""
     _load_env_for_spec(spec)
-    result = HarnessRunner(mode=mode, model=model, base_url=base_url, allow_llm_calls=allow_llm_calls).run_task(
-        _load_spec(spec), runs
+    result = HarnessRunner(
+        mode=mode,
+        model=model,
+        base_url=base_url,
+        allow_llm_calls=allow_llm_calls,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        disable_response_storage=disable_response_storage,
+        failure_context=_read_failure_context(failure_context),
+    ).run_task(
+        _load_spec(spec),
+        runs,
     )
     typer.echo(f"run_id={result.run_id}")
     typer.echo(f"status={result.gate.status}")
@@ -49,11 +65,20 @@ def run(
     typer.echo(f"artifacts={result.run_dir}")
 
 
+def _read_failure_context(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return path.read_text(encoding="utf-8")
+
+
 @app.command("api-check")
 def api_check(
     spec: Path = typer.Argument(..., help="Path to a task spec JSON file."),
     model: str = typer.Option("deepseek-v4-flash", "--model", help="OpenAI-compatible model name."),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="OpenAI-compatible base URL."),
+    wire_api: Optional[str] = typer.Option(None, "--wire-api", help="Provider wire API: chat_completions or responses."),
+    reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort for providers that support it."),
+    disable_response_storage: bool = typer.Option(False, "--disable-response-storage", help="Request provider-side response storage opt-out."),
     runs: Path = typer.Option(Path("runs"), "--runs", help="Directory where check artifacts are written."),
 ) -> None:
     """Validate API configuration without making a network call.
@@ -64,7 +89,13 @@ def api_check(
     """
     _load_env_for_spec(spec)
     loaded_spec = _load_spec(spec)
-    client = OpenAICompatibleClient(model=model, base_url=base_url)
+    client = OpenAICompatibleClient(
+        model=model,
+        base_url=base_url,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        disable_response_storage=disable_response_storage,
+    )
     run_hash = hashlib.sha256(f"{loaded_spec.id}|{model}|{client.base_url}".encode("utf-8")).hexdigest()[:8]
     safe_task_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in loaded_spec.id)[:64]
     run_id = f"api-check-{safe_task_id}-{run_hash}"
@@ -76,7 +107,18 @@ def api_check(
         "task_id": loaded_spec.id,
         "model": model,
         "configuration": client.configuration_note(),
-        "env_status": safe_env_status(["DEEPSEEK_API_KEY", "OPENAGENT_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_BASE_URL", "OPENAGENT_BASE_URL"]),
+        "env_status": safe_env_status(
+            [
+                "DEEPSEEK_API_KEY",
+                "OPENAGENT_API_KEY",
+                "OPENAI_API_KEY",
+                "DEEPSEEK_BASE_URL",
+                "OPENAGENT_BASE_URL",
+                "OPENAI_BASE_URL",
+                "OPENAGENT_WIRE_API",
+                "OPENAI_WIRE_API",
+            ]
+        ),
         "note": "api-check is a dry run; use deepseek-smoke or run --allow-llm-calls for real API calls.",
     }
     (run_dir / "api_check.json").write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -91,12 +133,15 @@ def api_check(
 def deepseek_check(
     model: str = typer.Option("deepseek-v4-flash", "--model", help="DeepSeek model name."),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Override DeepSeek/OpenAI-compatible base URL."),
+    wire_api: Optional[str] = typer.Option(None, "--wire-api", help="Provider wire API: chat_completions or responses."),
 ) -> None:
     """Print DeepSeek/OpenAI-compatible client configuration without calling the API."""
     load_env_file()
-    client = OpenAICompatibleClient(model=model, base_url=base_url)
+    client = OpenAICompatibleClient(model=model, base_url=base_url, wire_api=wire_api)
     note = client.configuration_note()
-    note["env_status"] = safe_env_status(["DEEPSEEK_API_KEY", "OPENAGENT_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_BASE_URL", "OPENAGENT_BASE_URL"])
+    note["env_status"] = safe_env_status(
+        ["DEEPSEEK_API_KEY", "OPENAGENT_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_BASE_URL", "OPENAGENT_BASE_URL", "OPENAI_BASE_URL"]
+    )
     typer.echo(json.dumps(note, ensure_ascii=False, indent=2))
 
 
@@ -104,6 +149,9 @@ def deepseek_check(
 def deepseek_smoke(
     model: str = typer.Option("deepseek-v4-flash", "--model", help="DeepSeek/OpenAI-compatible model name."),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Override DeepSeek/OpenAI-compatible base URL."),
+    wire_api: Optional[str] = typer.Option(None, "--wire-api", help="Provider wire API: chat_completions or responses."),
+    reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort for providers that support it."),
+    disable_response_storage: bool = typer.Option(False, "--disable-response-storage", help="Request provider-side response storage opt-out."),
     runs: Path = typer.Option(Path("runs_deepseek_smoke"), "--runs", help="Directory where smoke artifacts are written."),
     allow_llm_calls: bool = typer.Option(False, "--allow-llm-calls", help="Actually call the configured model API."),
     prompt: str = typer.Option(
@@ -116,16 +164,27 @@ def deepseek_smoke(
     load_env_file()
     if not allow_llm_calls:
         raise typer.BadParameter("Real API calls are disabled by default. Re-run with --allow-llm-calls to confirm spend is intentional.")
-    client = OpenAICompatibleClient(model=model, base_url=base_url, max_tokens=256, timeout_seconds=30.0)
+    client = OpenAICompatibleClient(
+        model=model,
+        base_url=base_url,
+        max_tokens=256,
+        timeout_seconds=30.0,
+        wire_api=wire_api,
+        reasoning_effort=reasoning_effort,
+        disable_response_storage=disable_response_storage,
+    )
     if not client.is_configured():
         raise typer.BadParameter("No API key configured. Put DEEPSEEK_API_KEY in a local .env file or export it in the shell.")
-    response = client.chat(
-        [
-            ChatMessage("system", "You are a minimal API connectivity tester. Return JSON only."),
-            ChatMessage("user", prompt),
-        ],
-        response_format_json=True,
-    )
+    try:
+        response = client.chat(
+            [
+                ChatMessage("system", "You are a minimal API connectivity tester. Return JSON only."),
+                ChatMessage("user", prompt),
+            ],
+            response_format_json=True,
+        )
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     runs.mkdir(parents=True, exist_ok=True)
     artifact = {
         "configured": client.configuration_note(),
@@ -220,6 +279,32 @@ def eval(
     typer.echo(f"pass_rate={summary.pass_rate}")
     typer.echo(f"summary={runs / 'eval_summary.json'}")
     typer.echo(f"html_report={runs / 'eval_report.html'}")
+
+
+@app.command()
+def compare(
+    benchmarks: Path = typer.Option(Path("benchmarks_engineering"), "--benchmarks", help="Directory containing benchmark task folders."),
+    profiles: Path = typer.Option(Path("examples/model_profiles.json"), "--profiles", help="JSON file defining model profiles."),
+    runs: Path = typer.Option(Path("runs_compare"), "--runs", help="Directory where comparison artifacts are written."),
+    parallel: int = typer.Option(2, "--parallel", min=1, help="Maximum concurrent profile/task runs."),
+    allow_llm_calls: bool = typer.Option(False, "--allow-llm-calls", help="Actually call configured model APIs."),
+) -> None:
+    """Run every task against every model profile and write a comparison report."""
+    _load_env_for_spec(profiles)
+    summary = run_compare(
+        benchmarks,
+        profiles,
+        runs,
+        project_root=Path.cwd(),
+        parallel=parallel,
+        allow_llm_calls=allow_llm_calls,
+    )
+    typer.echo(f"tasks={summary.total_tasks}")
+    typer.echo(f"runs={summary.total_runs}")
+    for profile in summary.profile_summaries:
+        typer.echo(f"profile={profile.profile} pass_rate={profile.pass_rate} avg_score={profile.avg_score}")
+    typer.echo(f"summary={runs / 'comparison_summary.json'}")
+    typer.echo(f"html_report={runs / 'comparison_report.html'}")
 
 
 if __name__ == "__main__":

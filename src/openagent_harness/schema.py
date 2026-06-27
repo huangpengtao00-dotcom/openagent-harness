@@ -19,13 +19,22 @@ class TaskSpec:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TaskSpec":
+        allowlist = data.get("allowlist", [])
+        acceptance = data.get("acceptance", [])
+        budget = data.get("budget", {})
+        if not isinstance(allowlist, list) or not all(isinstance(item, str) for item in allowlist):
+            raise ValueError("TaskSpec.allowlist must be a list of strings")
+        if not isinstance(acceptance, list) or not all(isinstance(item, str) for item in acceptance):
+            raise ValueError("TaskSpec.acceptance must be a list of strings")
+        if not isinstance(budget, dict):
+            raise ValueError("TaskSpec.budget must be an object")
         return cls(
             id=str(data["id"]),
             repo=str(data["repo"]),
             goal=str(data["goal"]),
-            allowlist=list(data.get("allowlist", [])),
-            acceptance=list(data.get("acceptance", [])),
-            budget=dict(data.get("budget", {})),
+            allowlist=allowlist,
+            acceptance=acceptance,
+            budget=budget,
         )
 
 
@@ -52,6 +61,7 @@ class GateResult:
     report_exists: bool
     status: Literal["pass", "fail"]
     failure_type: str | None
+    artifact_hygiene_ok: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -1,18 +1,37 @@
+.venv/
+venv/
+env/
 __pycache__/
 .pytest_cache/
-.venv/
-runs/
-runs_*/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.zip
 *.egg-info/
 src/*.egg-info/
 dist/
 build/
-*.pyc
-*.sqlite
-*.zip
-tools/
-AGENTS.md
+
 # Local API secrets. Never commit real keys.
 .env
 .env.*
 !.env.example
+
+# Generated run artifacts and local benchmark outputs.
+runs/
+runs_*/
+runs*/
+custom_tasks/
+
+# Generated personal/export artifacts.
+tools/
+*.docx
+*_Resume*.md
+*learning_guide*.md
+AGENTS.md
+.*_tmp/

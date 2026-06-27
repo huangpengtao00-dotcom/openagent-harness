@@ -65,7 +65,7 @@ Earlier versions proved that the harness could run tests and detect basic patch 
 API calls are disabled by default. A real model run requires explicit budget approval:
 
 ```bash
-python -m openagent_harness.cli run examples/deepseek_task.json \
+python -m openagent_harness.cli run examples/deepseek_real_task.json \
   --mode api \
   --model deepseek-v4-flash \
   --allow-llm-calls

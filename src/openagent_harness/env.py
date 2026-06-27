@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Mapping
 
 _SECRET_NAME_RE = re.compile(r"(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|secret|password|authorization)", re.IGNORECASE)
-_SECRET_VALUE_RE = re.compile(r"(?i)(sk-[A-Za-z0-9_\-]{4,}|Bearer\s+[A-Za-z0-9._\-+/=]+)")
+_SECRET_VALUE_RE = re.compile(r"(?i)(sk-[A-Za-z0-9_*.\-]{4,}|Bearer\s+[A-Za-z0-9._*\-]+)")
 
 
 def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[str, str]:
@@ -27,8 +27,6 @@ def load_env_file(path: Path | str = ".env", *, override: bool = False) -> dict[
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        if key.lower().startswith("export "):
-            key = key[7:].strip()
         value = value.strip().strip('"').strip("'")
         if not key:
             continue

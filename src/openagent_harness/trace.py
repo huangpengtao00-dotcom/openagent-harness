@@ -4,6 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .env import sanitize_mapping
 from .schema import TraceEvent
 
 
@@ -13,8 +14,9 @@ class JsonlTraceStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def append(self, event: TraceEvent) -> None:
+        payload = _sanitize_event(event)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 class SqliteTraceStore:
@@ -36,15 +38,20 @@ class SqliteTraceStore:
             )
 
     def append(self, event: TraceEvent) -> None:
+        payload = _sanitize_event(event)
         with sqlite3.connect(self.path) as conn:
             conn.execute(
                 "insert into trace_events values (?, ?, ?, ?, ?, ?)",
                 (
-                    event.run_id,
-                    event.task_id,
-                    event.phase,
-                    event.step,
-                    event.message,
-                    json.dumps(event.to_dict(), ensure_ascii=False),
+                    payload["run_id"],
+                    payload["task_id"],
+                    payload["phase"],
+                    payload["step"],
+                    payload["message"],
+                    json.dumps(payload, ensure_ascii=False),
                 ),
             )
+
+
+def _sanitize_event(event: TraceEvent) -> dict[str, object]:
+    return sanitize_mapping(event.to_dict())

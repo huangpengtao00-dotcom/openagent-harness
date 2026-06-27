@@ -9,10 +9,31 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -vv -s
 Expected result:
 
 ```text
-27 passed
+all selected tests pass
 ```
 
-## 2. Run all benchmarks
+## 2. Run the stable interview smoke on Windows
+
+CMD:
+
+```cmd
+scripts\smoke_retry_429.cmd
+```
+
+PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke_retry_429.ps1
+```
+
+Expected result includes:
+
+```text
+status=pass
+artifacts=...
+```
+
+## 3. Run all benchmarks
 
 ```bash
 PYTHONPATH=src python -m openagent_harness.cli eval --benchmarks benchmarks --runs runs_eval_final
@@ -27,38 +48,38 @@ failed=0
 pass_rate=1.0
 ```
 
-## 3. Inspect tool registry
+## 4. Inspect tool registry
 
 ```bash
 PYTHONPATH=src python -m openagent_harness.cli tools .
 ```
 
-## 4. Inspect code symbols
+## 5. Inspect code symbols
 
 ```bash
 PYTHONPATH=src python -m openagent_harness.cli index src/openagent_harness --query agent
 ```
 
-## 5. Run one task offline
+## 6. Run one task offline
 
 ```bash
 PYTHONPATH=src python -m openagent_harness.cli run benchmarks/calc-py/task.json --runs runs_demo
 ```
 
-## 6. Create DeepSeek API-mode placeholder
+## 7. Create DeepSeek API-mode placeholder
 
 ```bash
-PYTHONPATH=src python -m openagent_harness.cli api-check examples/deepseek_task.json --model deepseek-v4-flash
+PYTHONPATH=src python -m openagent_harness.cli api-check examples/deepseek_real_task.json --model deepseek-v4-flash
 ```
 
-## 7. Real DeepSeek run
+## 8. Real DeepSeek run
 
 ```bash
 export DEEPSEEK_API_KEY=your_key
-PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_task.json \
+PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_real_task.json \
   --mode api \
   --model deepseek-v4-flash \
   --allow-llm-calls
 ```
 
-API calls are disabled by default. Use the real run only when you intentionally want to spend tokens.
+API calls are disabled by default. Use the real run only when you intentionally want to spend tokens and can save the evidence.

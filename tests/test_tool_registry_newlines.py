@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from openagent_harness.policy import PermissionPolicy
+from openagent_harness.tools import run_command
 from openagent_harness.tool_registry import LocalToolRegistry
 
 
@@ -40,3 +41,21 @@ def test_edit_file_accepts_lf_anchor_but_preserves_crlf_file(tmp_path: Path) -> 
 
     assert result.ok is True
     assert target.read_bytes() == b"def f():\r\n    return 2\r\n"
+
+
+def test_run_command_filters_secret_environment(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "do-not-leak")
+    monkeypatch.setenv("OPENAI_API_KEY", "do-not-leak")
+    monkeypatch.setenv("SAFE_NON_SECRET_VALUE", "not-needed")
+    script = tmp_path / "check_env.py"
+    script.write_text(
+        "import os\n"
+        "assert os.environ.get('DEEPSEEK_API_KEY') is None\n"
+        "assert os.environ.get('OPENAI_API_KEY') is None\n"
+        "assert os.environ.get('SAFE_NON_SECRET_VALUE') is None\n",
+        encoding="utf-8",
+    )
+
+    result = run_command(["python", "check_env.py"], tmp_path, timeout_seconds=5)
+
+    assert result.exit_code == 0

@@ -8,7 +8,7 @@
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入：DEEPSEEK_API_KEY=sk-your-real-key
+# 编辑 .env，填入：DEEPSEEK_API_KEY=<your_deepseek_api_key>
 ```
 
 Linux/macOS 也可以临时导出环境变量：
@@ -45,7 +45,7 @@ PYTHONPATH=src python -m openagent_harness.cli deepseek-check --model deepseek-v
 这一步只验证 API 连通性，不修改代码：
 
 ```bash
-PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash --allow-llm-calls
+PYTHONPATH=src python -m openagent_harness.cli deepseek-smoke --model deepseek-v4-flash
 ```
 
 证据文件：

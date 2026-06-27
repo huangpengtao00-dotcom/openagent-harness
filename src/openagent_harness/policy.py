@@ -43,11 +43,14 @@ _DANGEROUS_SHELL_PATTERNS = [
 _DEFAULT_COMMAND_PREFIXES = [
     "python",
     "python3",
+    "py",
     "pytest",
     "uv",
     "ruff",
     "mypy",
 ]
+_ALLOWED_PYTHON_MODULES = {"pytest", "compileall", "mypy", "ruff"}
+_ALLOWED_UV_SUBCOMMANDS = {"run"}
 
 
 @dataclass(frozen=True)
@@ -109,6 +112,10 @@ class PermissionPolicy:
         if not parts:
             return PolicyDecision(False, "Empty command blocked.")
         binary = Path(parts[0]).name
+        if binary in {"python", "python3", "py"}:
+            return self._check_python_command(parts)
+        if binary == "uv":
+            return self._check_uv_command(parts)
         if any(binary == prefix or compact.startswith(prefix + " ") for prefix in self.allowed_command_prefixes):
             return PolicyDecision(True, "Command allowed by prefix policy.")
         return PolicyDecision(False, f"Command blocked by prefix policy: {binary}")
@@ -120,3 +127,36 @@ class PermissionPolicy:
         except ValueError:
             return None
         return candidate
+
+    def _check_python_command(self, parts: list[str]) -> PolicyDecision:
+        if len(parts) == 1:
+            return PolicyDecision(False, "Interactive Python commands are blocked.")
+        first_arg = parts[1]
+        if first_arg in {"-c", "--command"}:
+            return PolicyDecision(False, "Inline Python execution is blocked.")
+        if first_arg == "-m":
+            if len(parts) < 3:
+                return PolicyDecision(False, "Python module command is missing a module name.")
+            module = parts[2]
+            if module in _ALLOWED_PYTHON_MODULES:
+                return PolicyDecision(True, "Python module command allowed by policy.")
+            return PolicyDecision(False, f"Python module blocked by policy: {module}")
+        if first_arg.startswith("-"):
+            return PolicyDecision(False, f"Python flag blocked by policy: {first_arg}")
+        script = self._resolve_repo_path(first_arg)
+        if script is None:
+            return PolicyDecision(False, "Python script path escapes repository.")
+        if script.suffix != ".py":
+            return PolicyDecision(False, "Python direct execution is limited to repo .py files.")
+        if not script.exists() or not script.is_file():
+            return PolicyDecision(False, "Python script does not exist.")
+        return PolicyDecision(True, "Repo Python script command allowed by policy.")
+
+    def _check_uv_command(self, parts: list[str]) -> PolicyDecision:
+        if len(parts) < 2 or parts[1] not in _ALLOWED_UV_SUBCOMMANDS:
+            return PolicyDecision(False, "uv command is limited to explicit test/lint run commands.")
+        if len(parts) >= 3 and parts[2] in {"pytest", "ruff", "mypy"}:
+            return PolicyDecision(True, "uv run command allowed by policy.")
+        if len(parts) >= 5 and parts[2] in {"python", "python3", "py"} and parts[3] == "-m" and parts[4] in _ALLOWED_PYTHON_MODULES:
+            return PolicyDecision(True, "uv run Python module command allowed by policy.")
+        return PolicyDecision(False, "uv command target blocked by policy.")

@@ -12,7 +12,13 @@ from .env import sanitize_mapping
 
 
 _DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+_DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_MODEL = "deepseek-v4-flash"
+_CHAT_COMPLETIONS_WIRE_API = "chat_completions"
+_RESPONSES_WIRE_API = "responses"
+_RETRYABLE_HTTP_STATUS_CODES = {429, 502, 503, 504}
+_DEFAULT_PROVIDER_MAX_RETRIES = 2
+_DEFAULT_PROVIDER_RETRY_BACKOFF_SECONDS = 0.35
 
 # USD per 1M tokens. Keep this table small and explicit so the budget gate is auditable.
 # Values mirror the public DeepSeek API pricing page at the time this project was written.
@@ -57,6 +63,15 @@ class LLMClient(Protocol):
         ...
 
 
+class ProviderTransientError(RuntimeError):
+    """Provider returned a retryable transport/server error."""
+
+    def __init__(self, status_code: int | None, message: str, *, attempts: int) -> None:
+        self.status_code = status_code
+        self.attempts = attempts
+        super().__init__(message)
+
+
 def env_first(*names: str) -> str | None:
     for name in names:
         value = os.getenv(name)
@@ -70,6 +85,32 @@ def env_first_name(*names: str) -> str | None:
         if os.getenv(name):
             return name
     return None
+
+
+def _env_first_with_name(*names: str) -> tuple[str | None, str | None]:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value, name
+    return None, None
+
+
+def _looks_like_openai_model(model: str) -> bool:
+    normalized = model.lower()
+    return normalized.startswith(("gpt-", "o1", "o3", "o4", "o5", "chatgpt-", "codex-"))
+
+
+def _truthy(value: str | None) -> bool:
+    return bool(value and value.strip().lower() in {"1", "true", "yes", "on"})
+
+
+def _normalize_wire_api(value: str | None) -> str:
+    normalized = (value or _CHAT_COMPLETIONS_WIRE_API).strip().lower().replace("-", "_")
+    if normalized in {"chat", "chat_completion", "chat_completions"}:
+        return _CHAT_COMPLETIONS_WIRE_API
+    if normalized == _RESPONSES_WIRE_API:
+        return _RESPONSES_WIRE_API
+    raise ValueError(f"Unsupported wire_api={value!r}. Expected chat_completions or responses.")
 
 
 def estimate_tokens_from_text(text: str) -> int:
@@ -124,16 +165,56 @@ class OpenAICompatibleClient:
         thinking: str | None = None,
         reasoning_effort: str | None = None,
         user_id: str | None = None,
+        wire_api: str | None = None,
+        disable_response_storage: bool | None = None,
+        provider_max_retries: int = _DEFAULT_PROVIDER_MAX_RETRIES,
+        provider_retry_backoff_seconds: float = _DEFAULT_PROVIDER_RETRY_BACKOFF_SECONDS,
     ) -> None:
         self.model = model
-        self.base_url = (base_url or env_first("OPENAGENT_BASE_URL", "DEEPSEEK_BASE_URL") or _DEFAULT_DEEPSEEK_BASE_URL).rstrip("/")
-        self.api_key = api_key or env_first("OPENAGENT_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")
-        self.api_key_source = "direct" if api_key else env_first_name("OPENAGENT_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")
+        self.api_key, self.api_key_source = self._resolve_api_key(api_key, base_url)
+        self.base_url, self.base_url_source = self._resolve_base_url(base_url)
         self.timeout_seconds = timeout_seconds
         self.max_tokens = max_tokens
         self.thinking = thinking
         self.reasoning_effort = reasoning_effort
         self.user_id = user_id
+        self.wire_api = _normalize_wire_api(wire_api or env_first("OPENAGENT_WIRE_API", "OPENAI_WIRE_API"))
+        self.disable_response_storage = (
+            disable_response_storage
+            if disable_response_storage is not None
+            else _truthy(env_first("OPENAGENT_DISABLE_RESPONSE_STORAGE", "OPENAI_DISABLE_RESPONSE_STORAGE", "DISABLE_RESPONSE_STORAGE"))
+        )
+        self.provider_max_retries = max(0, int(provider_max_retries))
+        self.provider_retry_backoff_seconds = max(0.0, float(provider_retry_backoff_seconds))
+
+    def _resolve_api_key(self, api_key: str | None, base_url: str | None) -> tuple[str | None, str | None]:
+        if api_key:
+            return api_key, "direct"
+
+        openagent_key, openagent_source = _env_first_with_name("OPENAGENT_API_KEY")
+        if openagent_key:
+            return openagent_key, openagent_source
+
+        base_hint = (base_url or env_first("OPENAGENT_BASE_URL", "OPENAI_BASE_URL", "DEEPSEEK_BASE_URL") or "").lower()
+        use_openai_first = _looks_like_openai_model(self.model) or "openai.com" in base_hint
+        if use_openai_first:
+            return _env_first_with_name("OPENAI_API_KEY", "DEEPSEEK_API_KEY")
+        return _env_first_with_name("DEEPSEEK_API_KEY", "OPENAI_API_KEY")
+
+    def _resolve_base_url(self, base_url: str | None) -> tuple[str, str]:
+        if base_url:
+            return base_url.rstrip("/"), "direct"
+
+        openagent_base_url, openagent_source = _env_first_with_name("OPENAGENT_BASE_URL")
+        if openagent_base_url:
+            return openagent_base_url.rstrip("/"), openagent_source or "OPENAGENT_BASE_URL"
+
+        if self.api_key_source == "OPENAI_API_KEY" or _looks_like_openai_model(self.model):
+            openai_base_url, openai_source = _env_first_with_name("OPENAI_BASE_URL")
+            return (openai_base_url or _DEFAULT_OPENAI_BASE_URL).rstrip("/"), openai_source or "openai_default"
+
+        provider_base_url, provider_source = _env_first_with_name("DEEPSEEK_BASE_URL", "OPENAI_BASE_URL")
+        return (provider_base_url or _DEFAULT_DEEPSEEK_BASE_URL).rstrip("/"), provider_source or "deepseek_default"
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
@@ -142,18 +223,29 @@ class OpenAICompatibleClient:
         return {
             "model": self.model,
             "base_url": self.base_url,
+            "base_url_source": self.base_url_source,
+            "wire_api": self.wire_api,
             "api_key_configured": self.is_configured(),
             "api_key_source": self.api_key_source,
             "timeout_seconds": self.timeout_seconds,
             "max_tokens": self.max_tokens,
             "thinking": self.thinking,
             "reasoning_effort": self.reasoning_effort,
+            "disable_response_storage": self.disable_response_storage,
+            "provider_max_retries": self.provider_max_retries,
+            "provider_retry_backoff_seconds": self.provider_retry_backoff_seconds,
         }
 
     def chat(self, messages: list[ChatMessage], *, response_format_json: bool = False) -> LLMResponse:
         if not self.api_key:
-            raise RuntimeError("LLM API key is not configured. Set OPENAGENT_API_KEY or DEEPSEEK_API_KEY.")
+            raise RuntimeError("LLM API key is not configured. Set OPENAGENT_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY.")
 
+        if self.wire_api == _RESPONSES_WIRE_API:
+            return self._chat_via_responses(messages, response_format_json=response_format_json)
+
+        return self._chat_via_chat_completions(messages, response_format_json=response_format_json)
+
+    def _chat_via_chat_completions(self, messages: list[ChatMessage], *, response_format_json: bool = False) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [message.to_dict() for message in messages],
@@ -165,44 +257,109 @@ class OpenAICompatibleClient:
             payload["thinking"] = {"type": self.thinking}
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
+        if self.disable_response_storage:
+            payload["store"] = False
         if self.user_id:
             payload["user_id"] = self.user_id
 
-        body = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self.base_url}/chat/completions",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        started = time.monotonic()
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                raw_data = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            details = sanitize_mapping({"details": exc.read().decode("utf-8", errors="replace")})["details"]
-            raise RuntimeError(f"LLM API HTTP {exc.code}: {details}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"LLM API request failed after {round(time.monotonic() - started, 4)}s: {exc}") from exc
-
-        raw = json.loads(raw_data)
-        raw = sanitize_mapping(raw)
+        raw = self._post_json("/chat/completions", payload)
         choice = raw.get("choices", [{}])[0]
         message = choice.get("message", {})
         content = message.get("content") or ""
         usage = self._parse_usage(raw, messages, content)
         return LLMResponse(content=content, usage=usage, raw=raw)
 
+    def _chat_via_responses(self, messages: list[ChatMessage], *, response_format_json: bool = False) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "input": [
+                {
+                    "role": message.role,
+                    "content": message.content,
+                }
+                for message in messages
+            ],
+            "max_output_tokens": self.max_tokens,
+        }
+        if response_format_json:
+            payload["text"] = {"format": {"type": "json_object"}}
+        if self.reasoning_effort:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
+        if self.disable_response_storage:
+            payload["store"] = False
+        if self.user_id:
+            payload["user"] = self.user_id
+
+        raw = self._post_json("/responses", payload)
+        content = self._extract_responses_content(raw)
+        usage = self._parse_usage(raw, messages, content)
+        return LLMResponse(content=content, usage=usage, raw=raw)
+
+    def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        started = time.monotonic()
+        last_transient: ProviderTransientError | None = None
+        total_attempts = self.provider_max_retries + 1
+        for attempt in range(1, total_attempts + 1):
+            request = urllib.request.Request(
+                f"{self.base_url}{path}",
+                data=body,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    raw_data = response.read().decode("utf-8")
+                raw = json.loads(raw_data)
+                sanitized = sanitize_mapping(raw)
+                if attempt > 1:
+                    sanitized.setdefault("_provider_retry", {"attempts": attempt})
+                return sanitized
+            except urllib.error.HTTPError as exc:
+                details = sanitize_mapping({"details": exc.read().decode("utf-8", errors="replace")})["details"]
+                if exc.code not in _RETRYABLE_HTTP_STATUS_CODES:
+                    raise RuntimeError(f"LLM API HTTP {exc.code}: {details}") from exc
+                message = f"LLM provider transient HTTP {exc.code} after {attempt}/{total_attempts} attempts: {details}"
+                last_transient = ProviderTransientError(exc.code, message, attempts=attempt)
+                if attempt >= total_attempts:
+                    raise last_transient from exc
+            except urllib.error.URLError as exc:
+                message = f"LLM provider request failed after {round(time.monotonic() - started, 4)}s and {attempt}/{total_attempts} attempts: {exc}"
+                last_transient = ProviderTransientError(None, message, attempts=attempt)
+                if attempt >= total_attempts:
+                    raise last_transient from exc
+
+            time.sleep(self.provider_retry_backoff_seconds * attempt)
+
+        if last_transient is not None:
+            raise last_transient
+        raise RuntimeError("LLM API request failed without a provider response.")
+
+    def _extract_responses_content(self, raw: dict[str, Any]) -> str:
+        if isinstance(raw.get("output_text"), str):
+            return str(raw["output_text"])
+
+        chunks: list[str] = []
+        for item in raw.get("output") or []:
+            if not isinstance(item, dict):
+                continue
+            for content_item in item.get("content") or []:
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") == "output_text" and isinstance(content_item.get("text"), str):
+                    chunks.append(str(content_item["text"]))
+        return "".join(chunks)
+
     def _parse_usage(self, raw: dict[str, Any], messages: list[ChatMessage], content: str) -> ModelUsage:
         usage = raw.get("usage") or {}
         fallback_prompt = estimate_tokens_from_text("\n".join(m.content for m in messages))
         fallback_completion = estimate_tokens_from_text(content)
 
-        prompt_tokens = _safe_int(usage.get("prompt_tokens"), fallback_prompt)
-        completion_tokens = _safe_int(usage.get("completion_tokens"), fallback_completion)
+        prompt_tokens = _safe_int(usage.get("prompt_tokens", usage.get("input_tokens")), fallback_prompt)
+        completion_tokens = _safe_int(usage.get("completion_tokens", usage.get("output_tokens")), fallback_completion)
         total_tokens = _safe_int(usage.get("total_tokens"), prompt_tokens + completion_tokens)
         return ModelUsage(
             prompt_tokens=prompt_tokens,

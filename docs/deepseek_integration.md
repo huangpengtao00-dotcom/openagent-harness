@@ -33,8 +33,8 @@ python -m openagent_harness.cli context benchmarks/calc-py/repo "fix zero divisi
 Use this only after setting an API key and accepting spend risk.
 
 ```powershell
-$env:DEEPSEEK_API_KEY="sk-..."
-python -m openagent_harness.cli run examples/deepseek_task.json --mode api --model deepseek-v4-flash --allow-llm-calls
+$env:DEEPSEEK_API_KEY="<your_deepseek_api_key>"
+python -m openagent_harness.cli run examples/deepseek_real_task.json --mode api --model deepseek-v4-flash --allow-llm-calls
 ```
 
 `budget.enable_llm_calls` is intentionally false in the example. This prevents accidental API spend when a task file is copied into a demo.
