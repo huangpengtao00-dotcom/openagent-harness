@@ -1,6 +1,8 @@
-import json
+﻿import json
 from pathlib import Path
 
+from openagent_harness.agent_loop import AgentRunOutcome, AgentStep
+from openagent_harness.llm import ModelUsage, ProviderTransientError
 from openagent_harness.runner import HarnessRunner
 from openagent_harness.schema import TaskSpec
 
@@ -34,6 +36,14 @@ def test_scripted_runner_completes_local_demo_without_api(tmp_path: Path) -> Non
     assert result.gate.tests_passed is True
     assert (result.run_dir / "trace.jsonl").exists()
     assert (result.run_dir / "final_report.md").exists()
+    assert (result.run_dir / "artifact_hygiene.json").exists()
+    assert (result.run_dir / "evidence_summary.json").exists()
+    assert (result.run_dir / "evidence_summary.md").exists()
+    evidence = json.loads((result.run_dir / "evidence_summary.json").read_text(encoding="utf-8"))
+    assert evidence["status"] == "pass"
+    assert evidence["artifact_hygiene_ok"] is True
+    assert not list((result.run_dir / "repo").rglob("__pycache__"))
+    assert not (result.run_dir / "repo" / ".pytest_cache").exists()
 
 
 def test_api_mode_records_pending_configuration_without_calling_network(tmp_path: Path) -> None:
@@ -262,3 +272,102 @@ def test_runner_uses_custom_acceptance_command(tmp_path: Path) -> None:
 
     assert result.gate.status == "pass"
     assert test_result["commands"] == ["python check_custom.py"]
+
+
+def test_api_provider_failure_writes_artifacts(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("def ok():\n    return False\n", encoding="utf-8")
+    spec = TaskSpec(
+        id="T-provider-fail",
+        repo=str(repo),
+        goal="Fix ok.",
+        allowlist=["app.py"],
+        acceptance=["pytest"],
+        budget={"max_steps": 1},
+    )
+
+    def fail_api_agent(self, spec, repo_dir, run_dir, trace, sqlite_trace, run_id):
+        raise ProviderTransientError(502, "LLM provider transient HTTP 502 after 3/3 attempts", attempts=3)
+
+    monkeypatch.setattr(HarnessRunner, "_apply_api_agent", fail_api_agent)
+
+    result = HarnessRunner(mode="api", model="gpt-5.5", allow_llm_calls=True).run_task(spec, tmp_path / "runs")
+
+    assert result.gate.status == "fail"
+    assert result.gate.failure_type == "ProviderTransient"
+    assert (result.run_dir / "report.html").exists()
+    assert (result.run_dir / "scorecard.json").exists()
+    test_result = json.loads((result.run_dir / "test_result.json").read_text(encoding="utf-8"))
+    assert test_result["tests_ran"] is False
+    assert "HTTP 502" in test_result["stderr"]
+
+
+def test_api_agent_run_artifact_redacts_secret_like_values(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("def ok():\n    return True\n", encoding="utf-8")
+    spec = TaskSpec(
+        id="T-api-redact",
+        repo=str(repo),
+        goal="Run fake API agent.",
+        allowlist=["app.py"],
+        acceptance=["python -c pass"],
+        budget={"max_steps": 1},
+    )
+
+    class FakeApiAgent:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def is_configured(self):
+            return True
+
+        def apply(self, repo_dir, spec, *, failure_context=None):
+            return AgentRunOutcome(
+                changed_paths=[],
+                steps=[
+                    AgentStep(
+                        index=1,
+                        action="finish",
+                        args={},
+                        observation={"error": "provider echoed sk-live-secret-value"},
+                    )
+                ],
+                total_usage=ModelUsage(0, 0, 0, 0.0),
+                finished=False,
+                summary="failed with sk-live-secret-value",
+            )
+
+    monkeypatch.setattr("openagent_harness.runner.ApiAgent", FakeApiAgent)
+
+    result = HarnessRunner(mode="api", model="fake", allow_llm_calls=True).run_task(spec, tmp_path / "runs")
+
+    artifact = (result.run_dir / "api_agent_run.json").read_text(encoding="utf-8")
+    assert "sk-live-secret-value" not in artifact
+
+
+def test_api_failure_artifacts_redact_secret_like_values(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("def ok():\n    return False\n", encoding="utf-8")
+    spec = TaskSpec(
+        id="T-provider-secret-fail",
+        repo=str(repo),
+        goal="Fix ok.",
+        allowlist=["app.py"],
+        acceptance=["pytest"],
+        budget={"max_steps": 1},
+    )
+
+    def fail_api_agent(self, spec, repo_dir, run_dir, trace, sqlite_trace, run_id):
+        raise ProviderTransientError(401, "Incorrect API key provided: sk-live-secret-value", attempts=1)
+
+    monkeypatch.setattr(HarnessRunner, "_apply_api_agent", fail_api_agent)
+
+    result = HarnessRunner(mode="api", model="fake", allow_llm_calls=True).run_task(spec, tmp_path / "runs")
+
+    api_artifact = (result.run_dir / "api_agent_run.json").read_text(encoding="utf-8")
+    test_artifact = (result.run_dir / "test_result.json").read_text(encoding="utf-8")
+    assert "sk-live-secret-value" not in api_artifact
+    assert "sk-live-secret-value" not in test_artifact

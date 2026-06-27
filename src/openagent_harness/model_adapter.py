@@ -145,6 +145,8 @@ class ApiAgent:
         max_tokens: int = 2048,
         thinking: str | None = None,
         reasoning_effort: str | None = None,
+        wire_api: str | None = None,
+        disable_response_storage: bool | None = None,
     ) -> None:
         self.model = model
         self.client = OpenAICompatibleClient(
@@ -155,6 +157,8 @@ class ApiAgent:
             max_tokens=max_tokens,
             thinking=thinking,
             reasoning_effort=reasoning_effort,
+            wire_api=wire_api,
+            disable_response_storage=disable_response_storage,
         )
 
     def configuration_note(self) -> dict[str, Any]:
@@ -170,11 +174,12 @@ class ApiAgent:
     def is_configured(self) -> bool:
         return self.client.is_configured()
 
-    def apply(self, repo_dir: Path, spec: TaskSpec) -> AgentRunOutcome:
+    def apply(self, repo_dir: Path, spec: TaskSpec, *, failure_context: str | None = None) -> AgentRunOutcome:
         max_steps = int(spec.budget.get("max_steps", 8))
         prompt_char_budget = int(spec.budget.get("prompt_char_budget", 40_000))
         return JsonActionCodingAgent(
             self.client,
             max_steps=max_steps,
             prompt_char_budget=prompt_char_budget,
-        ).apply(repo_dir, spec)
+            adaptive=True,
+        ).apply(repo_dir, spec, failure_context=failure_context)

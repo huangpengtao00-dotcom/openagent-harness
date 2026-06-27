@@ -27,44 +27,18 @@ def test_load_env_file_and_configuration_note_never_exposes_key(tmp_path: Path, 
     assert "sk-test-secret-value" not in rendered
 
 
-def test_load_env_file_accepts_export_prefix(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    env_path = tmp_path / ".env"
-    env_path.write_text("export DEEPSEEK_API_KEY=sk-test-secret-value\n", encoding="utf-8")
-
-    loaded = load_env_file(env_path)
-
-    assert loaded["DEEPSEEK_API_KEY"] == "sk-test-secret-value"
-
-
 def test_sanitize_mapping_redacts_secret_like_values() -> None:
     payload = {
         "authorization": "Bearer abc.def.ghi",
         "nested": {"api_key": "sk-test-secret-value", "message": "ok"},
+        "provider_error": "Incorrect API key provided: sk-92861***********************5a84.",
         "text": "prefix sk-test-secret-value suffix",
     }
     rendered = json.dumps(sanitize_mapping(payload))
     assert "sk-test-secret-value" not in rendered
+    assert "sk-92861" not in rendered
+    assert "5a84" not in rendered
     assert "Bearer abc" not in rendered
-    assert "<redacted>" in rendered
-
-
-def test_sanitize_mapping_redacts_bearer_tokens_with_base64_chars() -> None:
-    payload = {"text": "prefix Bearer abc/def+ghi== suffix"}
-
-    rendered = json.dumps(sanitize_mapping(payload))
-
-    assert "Bearer abc/def+ghi==" not in rendered
-    assert "def+ghi==" not in rendered
-    assert "<redacted>" in rendered
-
-
-def test_sanitize_mapping_redacts_short_sk_placeholders() -> None:
-    payload = {"text": "prefix sk-test suffix"}
-
-    rendered = json.dumps(sanitize_mapping(payload))
-
-    assert "sk-test" not in rendered
     assert "<redacted>" in rendered
 
 

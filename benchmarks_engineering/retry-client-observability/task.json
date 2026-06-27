@@ -1,0 +1,20 @@
+{
+  "id": "retry-client-observability",
+  "repo": "benchmarks_engineering/retry-client-observability/repo",
+  "goal": "Fix the HTTP client retry policy and observability behavior. Requirements: retry 429 and 5xx responses within max_attempts, never retry ordinary 4xx responses, stop after success, record each attempt with status/error/backoff, use exponential backoff with jitter disabled in tests, raise RetryExhausted with the last status when budget is exhausted, and preserve deterministic behavior for injected sleep and transport doubles.",
+  "allowlist": [
+    "client.py",
+    "retry.py"
+  ],
+  "acceptance": [
+    "python -m pytest -q"
+  ],
+  "budget": {
+    "max_steps": 10,
+    "prompt_char_budget": 60000,
+    "llm_timeout_seconds": 90,
+    "llm_max_tokens": 4096,
+    "acceptance_timeout_seconds": 20,
+    "context_summary_files": 12
+  }
+}

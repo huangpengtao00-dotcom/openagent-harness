@@ -15,6 +15,7 @@ class RunScorecard:
     changed_files: int
     tests_passed: bool
     failure_type: str | None
+    artifact_hygiene_ok: bool
     rationale: list[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -39,6 +40,11 @@ def score_run(run_dir: Path, gate: GateResult) -> RunScorecard:
     if gate.scope_ok:
         score += 10
         rationale.append("patch stayed inside allowlist")
+    if gate.artifact_hygiene_ok:
+        rationale.append("artifacts passed hygiene scan")
+    else:
+        score -= 10
+        rationale.append("artifact hygiene violation blocked release")
     if 0 < changed_files <= 3:
         score += 3
         rationale.append("small changed-file footprint")
@@ -55,6 +61,7 @@ def score_run(run_dir: Path, gate: GateResult) -> RunScorecard:
         changed_files=changed_files,
         tests_passed=gate.tests_passed,
         failure_type=gate.failure_type,
+        artifact_hygiene_ok=gate.artifact_hygiene_ok,
         rationale=rationale,
     )
 

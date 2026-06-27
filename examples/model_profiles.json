@@ -1,0 +1,37 @@
+{
+  "profiles": [
+    {
+      "name": "scripted-baseline",
+      "mode": "local",
+      "model": "scripted"
+    },
+    {
+      "name": "gpt-5.5-newapi",
+      "mode": "api",
+      "model": "gpt-5.5",
+      "base_url": "https://api.sbbbbbbbbb.xyz/v1",
+      "api_key_env": "OPENAGENT_GPT55_API_KEY",
+      "wire_api": "chat_completions",
+      "budget_overrides": {
+        "max_steps": 10,
+        "llm_timeout_seconds": 90,
+        "llm_max_tokens": 4096,
+        "prompt_char_budget": 60000
+      }
+    },
+    {
+      "name": "gpt-5.4-newapi",
+      "mode": "api",
+      "model": "gpt-5.4",
+      "base_url": "https://api.sbbbbbbbbb.xyz/v1",
+      "api_key_env": "OPENAGENT_GPT54_API_KEY",
+      "wire_api": "chat_completions",
+      "budget_overrides": {
+        "max_steps": 10,
+        "llm_timeout_seconds": 90,
+        "llm_max_tokens": 4096,
+        "prompt_char_budget": 60000
+      }
+    }
+  ]
+}

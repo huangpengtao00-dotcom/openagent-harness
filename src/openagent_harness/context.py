@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
@@ -20,7 +20,7 @@ _TEXT_SUFFIXES = {
     ".cfg",
     ".csv",
 }
-_CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", "README.md", "pyproject.toml"]
+_CONTEXT_FILES = ["README.md", "pyproject.toml"]
 
 
 @dataclass(frozen=True)
@@ -128,3 +128,4 @@ class ContextBuilder:
             if token and token in lowered:
                 score += 8
         return score
+

@@ -182,6 +182,8 @@ def _failure_analysis(scorecard: RunScorecard, gate: GateResult, test_result: di
         return "Acceptance failed. Inspect Test Output and Patch Diff first; the most likely cause is an incomplete or over-broad patch."
     if gate.failure_type == "ScopeViolation":
         return "The patch touched files outside the allowlist. Tighten the agent policy or task spec."
+    if gate.failure_type == "ArtifactHygieneViolation":
+        return "Run artifacts failed the hygiene scan. Inspect artifact_hygiene.json for secret-like values or runtime cache leftovers."
     if gate.failure_type == "NoPatch":
         return "No code change was produced. Check whether the agent had enough context and whether the task is supported by the selected mode."
     if any(result.get("timed_out") for result in test_result.get("results", [])):

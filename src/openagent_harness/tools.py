@@ -8,6 +8,26 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+_SECRET_ENV_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL")
+_SAFE_ENV_ALLOWLIST = {
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "HOME",
+    "USERPROFILE",
+    "PYTHONPATH",
+    "PYTHONIOENCODING",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "VIRTUAL_ENV",
+}
+
+
 @dataclass(frozen=True)
 class ToolResult:
     command: list[str]
@@ -52,7 +72,7 @@ def run_command(
 ) -> ToolResult:
     """Run a subprocess and return structured evidence for the quality gate."""
     started = time.monotonic()
-    merged_env = os.environ.copy()
+    merged_env = _safe_child_environment()
     # Keep acceptance subprocesses isolated from a parent pytest session.
     # Without this, nested pytest invocations can inherit PYTEST_CURRENT_TEST and
     # become flaky or slow in full-suite runs.
@@ -104,3 +124,17 @@ def run_command(
             timed_out=True,
             duration_seconds=round(time.monotonic() - started, 4),
         )
+
+
+def _safe_child_environment() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
+        upper = key.upper()
+        if upper in _SAFE_ENV_ALLOWLIST or upper.startswith(("PYTEST_", "PYTHON")):
+            env[key] = value
+            continue
+        if any(marker in upper for marker in _SECRET_ENV_MARKERS):
+            continue
+        if upper in {"LANG", "LC_ALL", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"}:
+            env[key] = value
+    return env

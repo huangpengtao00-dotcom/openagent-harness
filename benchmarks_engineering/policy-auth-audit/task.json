@@ -1,0 +1,21 @@
+{
+  "id": "policy-auth-audit",
+  "repo": "benchmarks_engineering/policy-auth-audit/repo",
+  "goal": "Fix the backend authorization and audit pipeline. Requirements: deep-merge nested config without mutating DEFAULTS, apply suspended and rate-limit checks before role checks, require member/admin for private reads, block editor writes to locked resources while allowing admin writes, use anonymous limits for missing users, and recursively redact sensitive audit fields while producing deterministic sorted output.",
+  "allowlist": [
+    "config_loader.py",
+    "policy_engine.py",
+    "audit.py"
+  ],
+  "acceptance": [
+    "python -m pytest -q"
+  ],
+  "budget": {
+    "max_steps": 10,
+    "prompt_char_budget": 60000,
+    "llm_timeout_seconds": 90,
+    "llm_max_tokens": 4096,
+    "acceptance_timeout_seconds": 20,
+    "context_summary_files": 12
+  }
+}

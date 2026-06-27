@@ -4,10 +4,10 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from openagent_harness.cli import app
-from openagent_harness.llm import LLMResponse, ModelUsage
 
 
 def test_cli_api_check_writes_configuration(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENAGENT_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -65,6 +65,7 @@ def test_cli_eval_runs_discovered_benchmarks(tmp_path: Path) -> None:
 
 
 def test_cli_api_check_ignores_task_enable_llm_calls_without_network(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENAGENT_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -90,7 +91,7 @@ def test_cli_api_check_ignores_task_enable_llm_calls_without_network(tmp_path: P
     assert "network_call=false" in result.output
 
 
-def test_cli_api_check_reads_env_from_spec_directory_only(tmp_path: Path, monkeypatch) -> None:
+def test_cli_api_check_reads_env_from_spec_directory(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENAGENT_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -119,35 +120,93 @@ def test_cli_api_check_reads_env_from_spec_directory_only(tmp_path: Path, monkey
     assert "api_key_configured=true" in result.output
 
 
-def test_cli_deepseek_smoke_requires_explicit_allow_flag(tmp_path: Path, monkeypatch) -> None:
+def test_cli_api_check_reads_env_from_cwd_before_spec_directory(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-local-test-value\n", encoding="utf-8")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-cwd-test-value\n", encoding="utf-8")
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / ".env").write_text("DEEPSEEK_API_KEY=sk-spec-test-value\n", encoding="utf-8")
+    spec_path = spec_dir / "task.json"
+    spec_path.write_text(
+        json.dumps(
+            {
+                "id": "T-api-cwd-env",
+                "repo": str(tmp_path),
+                "goal": "Fix with model",
+                "allowlist": ["app.py"],
+                "acceptance": ["pytest"],
+                "budget": {"max_steps": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("chat should not run without explicit allow flag")
-
-    monkeypatch.setattr("openagent_harness.llm.OpenAICompatibleClient.chat", fail_if_called)
-
-    result = CliRunner().invoke(app, ["deepseek-smoke"])
-
-    assert result.exit_code != 0
-    assert "--allow-llm-calls" in result.output
-
-
-def test_cli_deepseek_smoke_runs_when_explicitly_allowed(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text("DEEPSEEK_API_KEY=sk-local-test-value\n", encoding="utf-8")
-
-    def fake_chat(self, messages, *, response_format_json=False):
-        return LLMResponse(
-            content='{"status":"ok"}',
-            usage=ModelUsage(prompt_tokens=3, completion_tokens=2, total_tokens=5, estimated_cost_usd=0.0000014),
-            raw={"id": "fake"},
-        )
-
-    monkeypatch.setattr("openagent_harness.llm.OpenAICompatibleClient.chat", fake_chat)
-
-    result = CliRunner().invoke(app, ["deepseek-smoke", "--allow-llm-calls", "--runs", str(tmp_path / "runs")])
+    result = CliRunner().invoke(app, ["api-check", str(spec_path), "--model", "deepseek-v4-flash", "--runs", str(tmp_path / "runs")])
 
     assert result.exit_code == 0
-    assert "ok=true" in result.output
+    assert "status=ok" in result.output
+    assert "api_key_configured=true" in result.output
+    assert "sk-cwd-test-value" not in result.output
+    assert "sk-spec-test-value" not in result.output
+
+
+def test_cli_compare_runs_profiles_matrix(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("MISSING_TEST_KEY", raising=False)
+    bench = tmp_path / "benchmarks" / "calc-py"
+    repo = bench / "repo"
+    repo.mkdir(parents=True)
+    (repo / "app.py").write_text("def divide(a, b):\n    return a / b\n", encoding="utf-8")
+    (repo / "test_app.py").write_text(
+        "from app import divide\n\n"
+        "def test_divide_zero_returns_none():\n"
+        "    assert divide(4, 0) is None\n",
+        encoding="utf-8",
+    )
+    (bench / "task.json").write_text(
+        json.dumps(
+            {
+                "id": "T1-calc-div-zero",
+                "repo": str(repo),
+                "goal": "Return None when divide receives zero denominator.",
+                "allowlist": ["app.py"],
+                "acceptance": ["pytest"],
+                "budget": {"max_steps": 8},
+            }
+        ),
+        encoding="utf-8",
+    )
+    profiles = tmp_path / "profiles.json"
+    profiles.write_text(
+        json.dumps(
+            {
+                "profiles": [
+                    {"name": "scripted-baseline", "mode": "local", "model": "scripted"},
+                    {"name": "api-placeholder", "mode": "api", "model": "gpt-5.5", "api_key_env": "MISSING_TEST_KEY"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "compare",
+            "--benchmarks",
+            str(tmp_path / "benchmarks"),
+            "--profiles",
+            str(profiles),
+            "--runs",
+            str(tmp_path / "runs_compare"),
+            "--parallel",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "tasks=1" in result.output
+    assert "runs=2" in result.output
+    assert "profile=scripted-baseline" in result.output

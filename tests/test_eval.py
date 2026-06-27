@@ -39,6 +39,15 @@ def test_run_eval_discovers_tasks_and_writes_summary(tmp_path: Path) -> None:
     assert summary.total == 1
     assert summary.passed == 1
     assert summary.pass_rate == 1.0
+    assert summary.avg_score > 0
+    assert summary.total_changed_files == 1
+    assert summary.tests_passed == 1
     summary_json = json.loads((tmp_path / "runs" / "eval_summary.json").read_text(encoding="utf-8"))
+    assert summary_json["avg_score"] > 0
+    assert summary_json["total_changed_files"] == 1
+    assert summary_json["tests_passed"] == 1
+    assert summary_json["failure_types"]["None"] == 1
     assert summary_json["results"][0]["task_id"] == "T1-calc-div-zero"
+    assert summary_json["results"][0]["profile"] == "scripted baseline"
     assert summary_json["results"][0]["status"] == "pass"
+    assert summary_json["results"][0]["tests_passed"] is True

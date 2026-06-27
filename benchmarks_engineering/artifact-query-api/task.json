@@ -1,0 +1,20 @@
+{
+  "id": "artifact-query-api",
+  "repo": "benchmarks_engineering/artifact-query-api/repo",
+  "goal": "Fix the run artifact query layer. Requirements: prevent path traversal when resolving artifact paths, list only known artifact files, support status/failure_type filters, paginate deterministically with total count, tolerate missing scorecard/test_result files, and compute per-run summary fields used by dashboards.",
+  "allowlist": [
+    "artifacts.py",
+    "runs.py"
+  ],
+  "acceptance": [
+    "python -m pytest -q"
+  ],
+  "budget": {
+    "max_steps": 10,
+    "prompt_char_budget": 60000,
+    "llm_timeout_seconds": 90,
+    "llm_max_tokens": 4096,
+    "acceptance_timeout_seconds": 20,
+    "context_summary_files": 12
+  }
+}

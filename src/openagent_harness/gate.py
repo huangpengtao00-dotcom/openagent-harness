@@ -16,6 +16,7 @@ class QualityGate:
         patch_path = run_dir / "patch.diff"
         test_result_path = run_dir / "test_result.json"
         report_path = run_dir / "final_report.md"
+        hygiene_path = run_dir / "artifact_hygiene.json"
 
         has_diff = patch_path.exists() and patch_path.read_text(encoding="utf-8").strip() != ""
         changed_paths = self._changed_paths(patch_path) if has_diff else set()
@@ -28,10 +29,21 @@ class QualityGate:
             tests_ran = bool(data.get("tests_ran"))
             tests_passed = bool(data.get("tests_passed"))
 
+        artifact_hygiene_ok = True
+        if hygiene_path.exists():
+            artifact_hygiene_ok = bool(json.loads(hygiene_path.read_text(encoding="utf-8")).get("ok", False))
+
         report_exists = report_path.exists() and report_path.read_text(encoding="utf-8").strip() != ""
-        status = "pass" if has_diff and tests_ran and tests_passed and scope_ok and report_exists else "fail"
-        failure_type = None if status == "pass" else self._failure_type(has_diff, tests_ran, tests_passed, scope_ok, report_exists)
-        return GateResult(has_diff, tests_ran, tests_passed, scope_ok, report_exists, status, failure_type)
+        status = "pass" if has_diff and tests_ran and tests_passed and scope_ok and report_exists and artifact_hygiene_ok else "fail"
+        failure_type = None if status == "pass" else self._failure_type(
+            has_diff,
+            tests_ran,
+            tests_passed,
+            scope_ok,
+            report_exists,
+            artifact_hygiene_ok,
+        )
+        return GateResult(has_diff, tests_ran, tests_passed, scope_ok, report_exists, status, failure_type, artifact_hygiene_ok)
 
     def _changed_paths(self, patch_path: Path) -> set[str]:
         changed: set[str] = set()
@@ -48,11 +60,14 @@ class QualityGate:
         tests_passed: bool,
         scope_ok: bool,
         report_exists: bool,
+        artifact_hygiene_ok: bool,
     ) -> str:
         if not has_diff:
             return "NoPatch"
         if not scope_ok:
             return "ScopeViolation"
+        if not artifact_hygiene_ok:
+            return "ArtifactHygieneViolation"
         if tests_ran and not tests_passed:
             return "Regression"
         if not tests_ran:

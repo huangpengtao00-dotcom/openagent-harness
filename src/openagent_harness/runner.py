@@ -3,14 +3,18 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import shutil
 import shlex
 import uuid
 from pathlib import Path
 
+from .artifact_hygiene import write_artifact_hygiene, write_evidence_summary
 from .context import ContextBuilder
+from .env import sanitize_mapping
 from .gate import QualityGate
 from .html_report import write_run_html_report
 from .ignore_rules import should_ignore_repo_path
+from .llm import ProviderTransientError
 from .model_adapter import ApiAgent, ScriptedAgent
 from .schema import GateResult, RunMode, RunResult, TaskSpec, TraceEvent
 from .tools import ToolResult, run_command
@@ -30,12 +34,20 @@ class HarnessRunner:
         base_url: str | None = None,
         api_key: str | None = None,
         allow_llm_calls: bool = False,
+        wire_api: str | None = None,
+        reasoning_effort: str | None = None,
+        disable_response_storage: bool | None = None,
+        failure_context: str | None = None,
     ) -> None:
         self.mode = mode
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
         self.allow_llm_calls = allow_llm_calls
+        self.wire_api = wire_api
+        self.reasoning_effort = reasoning_effort
+        self.disable_response_storage = disable_response_storage
+        self.failure_context = failure_context
 
     def run_task(self, spec: TaskSpec, runs_root: Path) -> RunResult:
         run_id = f"{spec.id}-{uuid.uuid4().hex[:8]}"
@@ -52,6 +64,7 @@ class HarnessRunner:
         repo_dir = run_dir / "repo"
         workspace = WorkspaceManager().create(Path(spec.repo), repo_dir)
         self._write_task_artifacts(run_dir, repo_dir, spec)
+        self._write_failure_context_artifact(run_dir)
         before = self._snapshot(repo_dir)
         self._append(
             trace,
@@ -67,13 +80,19 @@ class HarnessRunner:
         )
 
         if self.mode == "api":
-            changed = self._apply_api_agent(spec, repo_dir, run_dir, trace, sqlite_trace, run_id)
+            try:
+                changed = self._apply_api_agent(spec, repo_dir, run_dir, trace, sqlite_trace, run_id)
+            except ProviderTransientError as exc:
+                return self._record_api_failure(spec, run_id, run_dir, repo_dir, before, trace, sqlite_trace, exc, "ProviderTransient")
+            except RuntimeError as exc:
+                return self._record_api_failure(spec, run_id, run_dir, repo_dir, before, trace, sqlite_trace, exc, "ApiRuntimeError")
         else:
             changed = self._apply_scripted_agent(spec, repo_dir, trace, sqlite_trace, run_id)
 
         after = self._snapshot(repo_dir)
         self._write_patch(run_dir / "patch.diff", before, after)
         test_results = self._run_acceptance(spec, repo_dir)
+        self._cleanup_runtime_caches(repo_dir)
         tests_passed = self._write_test_results(run_dir, test_results)
         self._append(
             trace,
@@ -95,9 +114,11 @@ class HarnessRunner:
         )
 
         self._write_report(run_dir / "final_report.md", spec, tests_passed)
+        write_artifact_hygiene(run_dir)
         gate = QualityGate().check_run(run_dir, spec)
         (run_dir / "gate.json").write_text(json.dumps(gate.to_dict(), indent=2), encoding="utf-8")
         scorecard = write_run_html_report(run_dir, gate)
+        write_evidence_summary(run_dir)
         self._append(
             trace,
             sqlite_trace,
@@ -138,6 +159,67 @@ class HarnessRunner:
             encoding="utf-8",
         )
 
+    def _write_failure_context_artifact(self, run_dir: Path) -> None:
+        if self.failure_context:
+            (run_dir / "failure_context_input.txt").write_text(self.failure_context, encoding="utf-8")
+
+    def _record_api_failure(
+        self,
+        spec: TaskSpec,
+        run_id: str,
+        run_dir: Path,
+        repo_dir: Path,
+        before: dict[str, str],
+        trace: JsonlTraceStore,
+        sqlite_trace: SqliteTraceStore,
+        exc: Exception,
+        failure_type: str,
+    ) -> RunResult:
+        message = str(exc)
+        self._write_patch(run_dir / "patch.diff", before, self._snapshot(repo_dir))
+        self._write_json_artifact(
+            run_dir / "api_agent_run.json",
+            {
+                "finished": False,
+                "summary": message,
+                "steps": [],
+                "changed_paths": [],
+                "total_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "estimated_cost_usd": 0.0},
+                "failure_type": failure_type,
+            },
+        )
+        self._write_json_artifact(
+            run_dir / "test_result.json",
+            {
+                "tests_ran": False,
+                "tests_passed": False,
+                "command": "",
+                "commands": [],
+                "results": [],
+                "stdout": "",
+                "stderr": message,
+            },
+        )
+        self._write_report(run_dir / "final_report.md", spec, False)
+        write_artifact_hygiene(run_dir)
+        gate = GateResult(False, False, False, True, True, "fail", failure_type)
+        (run_dir / "gate.json").write_text(json.dumps(gate.to_dict(), indent=2), encoding="utf-8")
+        scorecard = write_run_html_report(run_dir, gate)
+        write_evidence_summary(run_dir)
+        self._append(
+            trace,
+            sqlite_trace,
+            TraceEvent(
+                run_id,
+                spec.id,
+                "fail",
+                3,
+                "api provider failed before a verified patch was produced",
+                observation={"failure_type": failure_type, "error": message, "score": scorecard.score},
+            ),
+        )
+        return RunResult(run_id, run_dir, gate)
+
     def _apply_scripted_agent(
         self,
         spec: TaskSpec,
@@ -177,12 +259,15 @@ class HarnessRunner:
             timeout_seconds=float(spec.budget.get("llm_timeout_seconds", 60.0)),
             max_tokens=int(spec.budget.get("llm_max_tokens", 2048)),
             thinking=spec.budget.get("thinking") if isinstance(spec.budget.get("thinking"), str) else None,
-            reasoning_effort=spec.budget.get("reasoning_effort") if isinstance(spec.budget.get("reasoning_effort"), str) else None,
+            reasoning_effort=self.reasoning_effort
+            or (spec.budget.get("reasoning_effort") if isinstance(spec.budget.get("reasoning_effort"), str) else None),
+            wire_api=self.wire_api,
+            disable_response_storage=self.disable_response_storage,
         )
         if not agent.is_configured():
             raise RuntimeError("API mode was allowed but no API key is configured.")
-        outcome = agent.apply(repo_dir, spec)
-        (run_dir / "api_agent_run.json").write_text(json.dumps(outcome.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        outcome = agent.apply(repo_dir, spec, failure_context=self.failure_context)
+        self._write_json_artifact(run_dir / "api_agent_run.json", outcome.to_dict())
         self._append(
             trace,
             sqlite_trace,
@@ -214,11 +299,20 @@ class HarnessRunner:
         trace: JsonlTraceStore,
         sqlite_trace: SqliteTraceStore,
     ) -> RunResult:
-        config = ApiAgent(self.model, base_url=self.base_url, api_key=self.api_key).configuration_note()
-        (run_dir / "api_mode.json").write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+        config = ApiAgent(
+            self.model,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            wire_api=self.wire_api,
+            reasoning_effort=self.reasoning_effort,
+            disable_response_storage=self.disable_response_storage,
+        ).configuration_note()
+        self._write_json_artifact(run_dir / "api_mode.json", config)
         (run_dir / "patch.diff").write_text("", encoding="utf-8")
+        write_artifact_hygiene(run_dir)
         gate = GateResult(False, False, False, True, False, "fail", "ApiNotConfigured")
         (run_dir / "gate.json").write_text(json.dumps(gate.to_dict(), indent=2), encoding="utf-8")
+        write_evidence_summary(run_dir)
         self._append(
             trace,
             sqlite_trace,
@@ -272,31 +366,27 @@ class HarnessRunner:
     def _write_test_results(self, run_dir: Path, test_results: list[ToolResult]) -> bool:
         tests_ran = len(test_results) > 0
         tests_passed = tests_ran and all(result.exit_code == 0 for result in test_results)
-        (run_dir / "test_result.json").write_text(
-            json.dumps(
-                {
-                    "tests_ran": tests_ran,
-                    "tests_passed": tests_passed,
-                    "command": " && ".join(" ".join(result.command) for result in test_results),
-                    "commands": [" ".join(result.command) for result in test_results],
-                    "results": [
-                        {
-                            "command": " ".join(result.command),
-                            "exit_code": result.exit_code,
-                            "stdout": result.stdout,
-                            "stderr": result.stderr,
-                            "timed_out": result.timed_out,
-                            "duration_seconds": result.duration_seconds,
-                        }
-                        for result in test_results
-                    ],
-                    "stdout": "\n".join(result.stdout for result in test_results),
-                    "stderr": "\n".join(result.stderr for result in test_results),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        self._write_json_artifact(
+            run_dir / "test_result.json",
+            {
+                "tests_ran": tests_ran,
+                "tests_passed": tests_passed,
+                "command": " && ".join(" ".join(result.command) for result in test_results),
+                "commands": [" ".join(result.command) for result in test_results],
+                "results": [
+                    {
+                        "command": " ".join(result.command),
+                        "exit_code": result.exit_code,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "timed_out": result.timed_out,
+                        "duration_seconds": result.duration_seconds,
+                    }
+                    for result in test_results
+                ],
+                "stdout": "\n".join(result.stdout for result in test_results),
+                "stderr": "\n".join(result.stderr for result in test_results),
+            },
         )
         return tests_passed
 
@@ -332,9 +422,18 @@ class HarnessRunner:
             encoding="utf-8",
         )
 
+    def _cleanup_runtime_caches(self, repo_dir: Path) -> None:
+        for name in ("__pycache__", ".pytest_cache"):
+            for path in repo_dir.rglob(name):
+                if path.is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+
     def _append(self, jsonl: JsonlTraceStore, sqlite: SqliteTraceStore, event: TraceEvent) -> None:
         jsonl.append(event)
         sqlite.append(event)
+
+    def _write_json_artifact(self, path: Path, payload: dict[str, object]) -> None:
+        path.write_text(json.dumps(sanitize_mapping(payload), ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _relative_path(self, repo_dir: Path, path: Path) -> str:
         """Return a stable repo-relative path across Windows/Unix and absolute/relative inputs."""

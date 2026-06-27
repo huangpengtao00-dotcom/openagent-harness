@@ -88,8 +88,9 @@ class LocalToolRegistry:
         handler = self._handlers.get(action)
         if handler is None:
             return ToolCallResult(False, error=f"Unknown action: {action}")
+        tool_payload = _tool_payload(payload)
         try:
-            return handler(payload)
+            return handler(tool_payload)
         except Exception as exc:  # noqa: BLE001 - local tools should surface structured failures to the agent.
             return ToolCallResult(False, error=f"{type(exc).__name__}: {exc}")
 
@@ -209,6 +210,15 @@ def _dominant_newline(text: str) -> str:
 def _adapt_to_newline_style(text: str, newline: str) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     return normalized.replace("\n", newline)
+
+
+def _tool_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Accept flat actions and OpenAI-style actions with nested parameters."""
+    for key in ("parameters", "args"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            return nested
+    return payload
 
 
 def _select_newline_aware_edit(file_text: str, old_text: str, new_text: str) -> tuple[str, str, int]:
