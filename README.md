@@ -20,7 +20,7 @@ Given a `task.json`, the harness can:
 8. run benchmark suites and produce `eval_report.html`;
 9. run a `task x model profile` comparison matrix and produce `comparison_summary.json` plus `comparison_report.html`.
 
-## Why this project is interview-grade
+## Why this project holds up under scrutiny
 
 Most coding-agent demos stop at “LLM generated code.” This project focuses on the harder engineering questions:
 
@@ -30,7 +30,7 @@ Most coding-agent demos stop at “LLM generated code.” This project focuses o
 - How do you make edits reviewable instead of rewriting whole files?
 - How do you verify that a patch actually passes tests?
 - How do you classify failures and compare candidates?
-- How do you produce evidence an interviewer can inspect?
+- How do you produce evidence a reviewer can inspect?
 
 ## Multi-model comparison
 
@@ -126,7 +126,7 @@ failed=0
 pass_rate=1.0
 ```
 
-Run realistic interview benchmark evaluation:
+Run the realistic benchmark evaluation:
 
 ```bash
 PYTHONPATH=src python -m openagent_harness.cli eval --benchmarks benchmarks_realistic --runs runs_v1_realistic
@@ -237,7 +237,6 @@ PYTHONPATH=src python -m openagent_harness.cli run examples/deepseek_real_task.j
 
 API calls are disabled by default at the Harness CLI request layer. This prevents accidental spending during demos. Real keys are read only from environment variables or local `.env`, and `.env` is excluded by `.gitignore`. `api-check` loads the current working directory `.env` first, then the task-spec directory `.env` without overriding existing values; it never makes a network call. See `docs/secure_deepseek_key_setup.md`.
 
-
 ## Stable verification commands
 
 For local project validation, keep unit tests and benchmark execution as separate commands. This avoids recursively nesting too many pytest subprocesses during CI-style checks while still validating both layers.
@@ -300,7 +299,7 @@ The repo includes seven toy regression benchmark tasks:
 | `cache-ttl` | expired cache eviction |
 | `retry-policy` | HTTP retry policy boundary |
 
-The `benchmarks_realistic/` suite adds three GitHub-issue-style tasks for interview demos:
+The `benchmarks_realistic/` suite adds three GitHub-issue-style tasks for realistic demos:
 
 | Task | Scenario |
 |---|---|
@@ -332,27 +331,3 @@ trace.sqlite         queryable trace database
 final_report.md      compact text summary
 ```
 
-## Interview positioning
-
-Use this one-liner:
-
-> OpenAgent Harness is a multi-model coding-agent evaluation platform with OpenAI-compatible model profiles, concurrent task x model comparison, JSON-action tool loop, patch-level editing, permission policy, repository context compaction, acceptance verification, scorecards, trace replay, and HTML evidence reports.
-
-See:
-
-- `docs/final_architecture.md`
-- `docs/interview_playbook_cn.md`
-- `docs/interview_prep_from_zero_cn.md`
-- `docs/interview_flashcards_cn.md`
-- `docs/evidence_matrix.md`
-- `docs/demo_commands.md`
-
-
-## v1.0 interview delivery docs
-
-- `docs/v1_interview_report.md`
-- `docs/deepseek_real_run.md`
-- `docs/system_design_cn.md`
-- `docs/interview_qa_cn.md`
-
-The project intentionally does not ship fabricated real DeepSeek artifacts. Real API evidence should be generated with your own key and saved under `runs_deepseek_real/`.
