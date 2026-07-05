@@ -1,16 +1,16 @@
 # API and Feature Tradeoff Log
 
-This file records features that are useful but may not be worth building before interviews.
+This file records features that are useful but may not be worth building for the current demo scope.
 
 ## Keep for Later
 
 | Item | Value | Cost / Risk | Recommendation |
 |---|---|---|---|
 | Real LiteLLM model calls | Enables multi-model comparison | Needs API keys, spend control, retry handling, prompt tuning | Add after local demo is stable |
-| Docker sandbox | Strong reproducibility | Setup overhead on Windows; interview demos can fail if Docker is not running | Keep as P1 |
+| Docker sandbox | Strong reproducibility | Setup overhead on Windows; live demos can fail if Docker is not running | Keep as P1 |
 | 10+ benchmark tasks | Better evaluation story | More authoring and maintenance | Current baseline has 5 passing tasks; expand to 10 next |
 | Static HTML report | Strong visual demo | Not necessary for first technical screen | Add only if applying to product-facing AI roles |
-| Multi-agent mode | Trendy talking point | Scope explosion and harder failure attribution | Do not add before internship interviews |
+| Multi-agent mode | Trendy talking point | Scope explosion and harder failure attribution | Do not add before the core loop is stable |
 | RAG / vector DB | Familiar AI keyword | Not central to coding-agent reliability | Skip unless job description asks for RAG |
 | Browser automation | Broader agent surface | Too much unrelated complexity | Skip for now |
 

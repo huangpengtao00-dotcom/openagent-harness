@@ -7,7 +7,7 @@ The project goal is **not** to keep adding agent buzzwords. The current route is
 1. Keep a local deterministic baseline for offline verification.
 2. Add a safe DeepSeek/OpenAI-compatible API path.
 3. Generate auditable evidence: context, tool calls, permission decisions, patch, tests, cost, scorecard, HTML report.
-4. Use realistic but small benchmarks for interview demonstration.
+4. Use realistic but small benchmarks for live demonstration.
 
 The latest changes are necessary because they remove API onboarding blockers rather than expanding scope.
 

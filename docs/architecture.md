@@ -10,7 +10,7 @@ OpenAgent Harness is a quality and evaluation layer for coding agents. It does n
 4. Record every phase to `trace.jsonl` and `trace.sqlite`.
 5. Generate `patch.diff`, `test_result.json`, and `final_report.md`.
 6. Run `QualityGate` as the source of truth.
-7. Classify failure type for interview-grade debugging.
+7. Classify failure type for review-grade debugging.
 
 ## Eval Flow
 
@@ -28,7 +28,7 @@ Current local benchmark set:
 
 ### Version A: Local Demo
 
-This version does not call any model API. It uses a deterministic `ScriptedAgent` so the project can be demonstrated on any laptop, in a classroom, or during an interview without API keys or spend risk.
+This version does not call any model API. It uses a deterministic `ScriptedAgent` so the project can be demonstrated on any laptop, in a classroom, or during a live demo without API keys or spend risk.
 
 ### Version B: API-Ready
 
@@ -43,6 +43,6 @@ This version records API configuration through the `ApiAgent` adapter but intent
 - `ReportMissing`: execution did not produce a final report.
 - `ApiNotConfigured`: API mode was selected, but real model calls are intentionally disabled.
 
-## Why This Is Interview-Friendly
+## Why This Is Demo-Friendly
 
 Most demo AI projects only show model output. This project shows the engineering layer that decides whether the output is trustworthy. That maps well to AI engineering roles because it covers reproducibility, evaluation, traces, budgets, and failure diagnosis.
