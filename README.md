@@ -106,7 +106,7 @@ PYTHONPATH=src python -m pytest tests/test_secure_deepseek_env.py tests/test_too
 Expected:
 
 ```text
-11 passed
+15 passed
 ```
 
 The full test suite includes subprocess-heavy benchmark tests. For the most stable cross-platform validation, run tests by file or use the benchmark commands below as the system-level acceptance check.
