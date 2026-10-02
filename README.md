@@ -331,3 +331,6 @@ trace.sqlite         queryable trace database
 final_report.md      compact text summary
 ```
 
+---
+
+More context: [opallagent.com/projects/openagent.html](https://opallagent.com/projects/openagent.html) — Project dossier for the platform this harness belongs to.
